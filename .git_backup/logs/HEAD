@@ -1,0 +1,11 @@
+0000000000000000000000000000000000000000 21ca849940e8aa0597adf02c6c1b49d733ee7919 S0lace <136303284@qq.com> 1734846296 +0800	commit (initial): download youtube video
+21ca849940e8aa0597adf02c6c1b49d733ee7919 b5d97722c9aaf22fec9d5b8e5deb323f604675a0 S0lace <136303284@qq.com> 1734848033 +0800	commit: add front-end page
+b5d97722c9aaf22fec9d5b8e5deb323f604675a0 746b53b989f6eff3ef3516cf258d646cedacb7f3 S0lace <136303284@qq.com> 1736173949 +0800	commit: add video_service and youtube_service, use oss and dashscope service, transcribe video audio into text
+746b53b989f6eff3ef3516cf258d646cedacb7f3 4b68c2ee04a96c766bbea9191568278875ec18e6 S0lace <136303284@qq.com> 1737170763 +0800	commit: add front-end history page
+4b68c2ee04a96c766bbea9191568278875ec18e6 b0204a25d2b1f5f3b67b8cd23a24576bacd54288 S0lace <136303284@qq.com> 1737188576 +0800	commit: add history page,save video to history
+b0204a25d2b1f5f3b67b8cd23a24576bacd54288 361b882a5197ea8988953f0a754b594b4799ed23 S0lace <136303284@qq.com> 1737189791 +0800	commit: divide player and history page
+361b882a5197ea8988953f0a754b594b4799ed23 23616be5e4997b9d5ccec093e262b8e30259ebef S0lace <136303284@qq.com> 1737191986 +0800	commit: able to play video,able to delete history
+23616be5e4997b9d5ccec093e262b8e30259ebef 37dd8acfbf6f9f85dd53400681f5ab4a861427e5 S0lace <136303284@qq.com> 1737193760 +0800	commit: transribe ok,but can not permanently show the transcription result
+37dd8acfbf6f9f85dd53400681f5ab4a861427e5 1bde49a04af8dafb8adf337600143e428987612c S0lace <136303284@qq.com> 1737263325 +0800	commit: add downloads/ to gitignore
+1bde49a04af8dafb8adf337600143e428987612c 9e31fd9d13bd280a11637a70abd9346064669ba9 S0lace <136303284@qq.com> 1737263618 +0800	commit: add .env.example
+9e31fd9d13bd280a11637a70abd9346064669ba9 67b33bc09c3989dde534ca4456ec3917229045b5 S0lace <136303284@qq.com> 1737264015 +0800	commit: remove cache

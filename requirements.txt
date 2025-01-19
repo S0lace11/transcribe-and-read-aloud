@@ -1,0 +1,8 @@
+flask==2.3.3
+python-dotenv==1.0.0
+yt-dlp==2024.12.23
+dashscope==1.13.6
+oss2==2.18.3
+moviepy==1.0.3
+python-magic==0.4.27
+redis==5.0.1
