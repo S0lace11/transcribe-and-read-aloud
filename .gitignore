@@ -8,11 +8,6 @@ venv/
 # 环境配置
 .env
 
-# 上传的临时文件
-downloads/*
-uploads/*
-!uploads/.gitkeep
-
 # IDE
 .vscode/
 .idea/
@@ -24,3 +19,7 @@ Thumbs.db
 # 其他
 .cursorrules
 cookies.txt
+
+# 添加这些行
+records/*
+!records/.gitkeep

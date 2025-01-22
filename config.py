@@ -6,7 +6,8 @@ load_dotenv(override=True)
 
 class Config:
     # 基础路径配置
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+    RECORDS_FOLDER = os.path.join(BASE_DIR, 'records')
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
     DOWNLOAD_FOLDER = os.path.join(BASE_DIR, 'downloads')
     
@@ -42,10 +43,9 @@ class Config:
     @classmethod
     def init_folders(cls):
         """初始化必要的文件夹"""
-        for folder in [cls.UPLOAD_FOLDER, cls.DOWNLOAD_FOLDER]:
-            if not os.path.exists(folder):
-                os.makedirs(folder)
-                
+        if not os.path.exists(cls.RECORDS_FOLDER):
+            os.makedirs(cls.RECORDS_FOLDER)
+        
     @classmethod
     def allowed_file(cls, filename):
         """检查文件扩展名是否允许"""

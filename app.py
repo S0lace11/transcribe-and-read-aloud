@@ -35,14 +35,14 @@ def process_upload():
             
         # 直接使用原始文件名，但确保安全
         filename = secure_filename(video_file.filename)
-        file_path = os.path.join(Config.UPLOAD_FOLDER, filename)
+        file_path = os.path.join(Config.RECORDS_FOLDER, filename)
         
         # 如果文件已存在，添加数字后缀
         base, ext = os.path.splitext(filename)
         counter = 1
         while os.path.exists(file_path):
             filename = f"{base}_{counter}{ext}"
-            file_path = os.path.join(Config.UPLOAD_FOLDER, filename)
+            file_path = os.path.join(Config.RECORDS_FOLDER, filename)
             counter += 1
         
         video_file.save(file_path)

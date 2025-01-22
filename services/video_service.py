@@ -242,8 +242,7 @@ class VideoService:
                 return cached_result
                 
             # 2. 获取正确的文件路径
-            base_folder = Config.UPLOAD_FOLDER if source_type == 'upload' else Config.DOWNLOAD_FOLDER
-            video_path = os.path.join(base_folder, filename)
+            video_path = os.path.join(Config.RECORDS_FOLDER, filename)
             
             # 检查视频文件
             is_valid, error_msg = self.check_video(video_path)
@@ -369,13 +368,23 @@ class VideoService:
             return []
 
     def delete_history(self, history_id):
-        """删除历史记录"""
+        """删除历史记录及对应的视频文件"""
         try:
             # 获取视频路径
             video_data = self.redis.hgetall(history_id)
             if not video_data:
                 return False, "历史记录不存在"
                 
+            # 删除视频文件
+            video_path = os.path.join(Config.RECORDS_FOLDER, video_data.get('video_path', ''))
+            if os.path.exists(video_path):
+                try:
+                    os.remove(video_path)
+                    print(f"已删除视频文件: {video_path}")
+                except Exception as e:
+                    print(f"删除视频文件失败: {str(e)}")
+                    return False, f"删除视频文件失败: {str(e)}"
+                    
             # 从Redis中删除历史记录
             self.redis.delete(history_id)
             # 从最近记录列表中删除
