@@ -71,20 +71,35 @@ def process_upload():
 
 @app.route('/download', methods=['POST'])
 def download_youtube():
-    """处理YouTube视频下载，只下载到本地"""
+    """处理YouTube视频下载，保存到records文件夹并记录历史"""
     try:
         url = request.json.get('url')
         if not url:
             return jsonify({'error': '请提供YouTube视频链接'}), 400
             
         # 生成任务ID
-        task_id = str(int(time.time()))  # 使用时间戳作为任务ID
+        task_id = str(int(time.time()))
         
         # 在新线程中启动下载
-        thread = threading.Thread(
-            target=youtube_service.download_video,
-            args=(url, task_id)
-        )
+        def download_and_save_history():
+            try:
+                # 下载视频
+                video_info = youtube_service.download_video(url, task_id)
+                
+                if video_info:
+                    # 保存到历史记录
+                    video_data = {
+                        'title': video_info['title'],
+                        'source': 'youtube',
+                        'video_path': video_info['filename'],
+                        'duration': video_info['duration'],
+                        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                    video_service.save_to_history(video_data)
+            except Exception as e:
+                print(f"下载和保存历史记录失败: {str(e)}")
+                
+        thread = threading.Thread(target=download_and_save_history)
         thread.daemon = True
         thread.start()
         
@@ -124,7 +139,7 @@ def player(video_path):
     try:
         source = request.args.get('source', 'upload')
         # 检查文件是否存在
-        video_file_path = os.path.join(Config.UPLOAD_FOLDER, video_path)
+        video_file_path = os.path.join(Config.RECORDS_FOLDER, video_path)
         if not os.path.exists(video_file_path):
             return "视频文件不存在", 404
             
@@ -143,7 +158,7 @@ def player(video_path):
 def serve_video(filename):
     """提供视频文件服务"""
     try:
-        return send_from_directory(Config.UPLOAD_FOLDER, filename)
+        return send_from_directory(Config.RECORDS_FOLDER, filename)
     except Exception as e:
         print(f"视频服务出错: {str(e)}")
         return str(e), 500

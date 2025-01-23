@@ -141,16 +141,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     showVideo(data.video_path);
                     youtubeTranscribeBtn.classList.remove('d-none');
                     showSuccess('下载完成！');
+                    enableUI();  // 启用UI
+                    downloadProgress.classList.add('d-none');  // 隐藏进度条
                 } else if (data.status === 'error') {
                     showError(data.message);
                     eventSource.close();
+                    enableUI();
+                    downloadProgress.classList.add('d-none');
                 }
-            };
-            
-            eventSource.onerror = function() {
-                eventSource.close();
-                showError('下载过程中断');
-                enableUI();
             };
 
             const response = await fetch('/download', {

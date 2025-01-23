@@ -5,6 +5,8 @@ YouTube视频下载服务模块
 
 import sys
 import os
+import re  # 添加 re 模块导入
+from datetime import datetime  # 添加 datetime 导入
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import yt_dlp
 from config import Config
@@ -37,6 +39,29 @@ class YouTubeService:
                 return f"{bytes:.1f}{unit}"
             bytes /= 1024
         return f"{bytes:.1f}GB"
+        
+    def _sanitize_filename(self, title):
+        """处理文件名，使其安全且易读
+        
+        Args:
+            title: 原始标题
+            
+        Returns:
+            str: 处理后的文件名
+        """
+        # 截取前30个字符
+        title = title[:30].strip()
+        
+        # 移除特殊字符，只保留字母、数字、空格和中文字符
+        title = re.sub(r'[^\w\s\u4e00-\u9fff-]', '', title)
+        
+        # 将空格替换为下划线
+        title = title.replace(' ', '_')
+        
+        # 添加时间戳
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        return f"{title}_{timestamp}.mp4"
         
     def _create_progress_hook(self, task_id):
         """创建下载进度回调函数
@@ -89,10 +114,9 @@ class YouTubeService:
             # 创建进度队列
             self.progress_queues[task_id] = queue.Queue()
             
-            # 配置下载选项
+            # 基础下载选项
             ydl_opts = {
                 'format': 'mp4',
-                'outtmpl': os.path.join(Config.DOWNLOAD_FOLDER, '%(title)s.%(ext)s'),
                 'progress_hooks': [self._create_progress_hook(task_id)],
             }
             
@@ -102,24 +126,25 @@ class YouTubeService:
             elif Config.YOUTUBE_BROWSER:
                 ydl_opts['cookiesfrombrowser'] = (Config.YOUTUBE_BROWSER,)
             
-            # 获取视频信息和下载
+            # 先获取视频信息
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 video_info = ydl.extract_info(url, download=False)
-                
                 if not video_info:
                     raise Exception("无法获取视频信息")
                 
-                # 下载视频
-                ydl.download([url])
+                # 生成安全的文件名
+                safe_filename = self._sanitize_filename(video_info.get('title', 'video'))
                 
-                # 获取下载后的文件名
-                filename = os.path.basename(
-                    ydl.prepare_filename(video_info)
-                ).replace('\\', '/')
+                # 更新下载选项，设置输出路径
+                ydl_opts['outtmpl'] = os.path.join(Config.RECORDS_FOLDER, safe_filename)
+                
+                # 使用更新后的选项下载视频
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl_download:
+                    ydl_download.download([url])
                 
                 return {
                     'title': video_info.get('title', 'YouTube视频'),
-                    'filename': filename,
+                    'filename': safe_filename,
                     'duration': video_info.get('duration', 0)
                 }
                 
