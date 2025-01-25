@@ -64,7 +64,10 @@
         window.videoInfo = {
             path: "{{ video_path }}",
             source: "{{ source }}",
-            url: "{{ video_url }}"
+            url: "{{ video_url }}",
+            history_id: "{{ history_id }}",
+            transcribed: "{{ transcribed }}",
+            transcription: "{% if transcription %}{{ transcription | safe }}{% else %}null{% endif %}"
         };
     </script>
     <script src="{{ url_for('static', filename='js/player.js') }}"></script>

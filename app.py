@@ -165,7 +165,7 @@ def serve_video(filename):
 
 @app.route('/transcribe', methods=['POST'])
 def transcribe():
-    """处理视频转录请求，包括上传到OSS和转录"""
+    """处理视频转录请求"""
     try:
         data = request.json
         if not data or 'filename' not in data or 'source' not in data:
@@ -174,28 +174,10 @@ def transcribe():
         filename = data['filename']
         source = data['source']
         
-        # 1. 检查缓存
-        cache_key = f"video:transcription:{filename}"
-        cached_result = video_service.redis.get(cache_key)
-        if cached_result:
-            print("从缓存获取转录结果")
-            return jsonify({
-                'success': True,
-                'message': '转录成功（缓存）',
-                'transcription': json.loads(cached_result)
-            })
-        
-        # 2. 处理视频转录
+        # 处理视频转录
         result = video_service.process_video(filename, source_type=source)
         if not result:
             return jsonify({'error': '视频转录失败'}), 500
-        
-        # 3. 保存结果到缓存
-        video_service.redis.setex(
-            cache_key,
-            Config.REDIS_CACHE_TTL,
-            json.dumps(result['transcription'])
-        )
         
         return jsonify({
             'success': True,

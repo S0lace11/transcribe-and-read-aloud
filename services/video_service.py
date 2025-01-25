@@ -222,26 +222,48 @@ class VideoService:
         except Exception as e:
             print(f"转写过程发生错误：{str(e)}")
             return None
+        
+    def format_time(self, seconds):
+        """将秒数转换为时分秒格式
+    
+        Args:
+        seconds: 秒数（可以是整数或浮点数）
+        
+        Returns:
+            str: 格式化后的时间字符串 (HH:MM:SS)
+        """
+        try:
+            # 确保输入是数字
+            seconds = float(seconds)
+            
+            # 计算小时、分钟和秒
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            seconds = int(seconds % 60)
+            
+            # 如果有小时，返回 HH:MM:SS 格式
+            if hours > 0:
+                return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            # 否则返回 MM:SS 格式
+            else:
+                return f"{minutes:02d}:{seconds:02d}"
+                
+        except (ValueError, TypeError) as e:
+            print(f"时间格式化失败: {str(e)}")
+            return "00:00"
 
     def process_video(self, filename, source_type='upload'):
         """处理视频文件
         
         Args:
             filename: 视频文件名
-            source_type: 'upload' 或 'download' 表示视频来源
+            source_type: 'upload' 或 'youtube' 表示视频来源
             
         Returns:
-            dict: 处理结果，包含视频URL和转写结果，失败返回None
+            dict: 处理结果，包含转写结果，失败返回None
         """
         try:
-            # 1. 检查缓存
-            cache_key = f"video:transcription:{filename}"
-            cached_result = self._get_cache(cache_key)
-            if cached_result:
-                print("从缓存获取转录结果")
-                return cached_result
-                
-            # 2. 获取正确的文件路径
+            # 获取正确的文件路径
             video_path = os.path.join(Config.RECORDS_FOLDER, filename)
             
             # 检查视频文件
@@ -260,17 +282,36 @@ class VideoService:
             if not transcription:
                 return None
                 
-            # 3. 构建结果
-            result = {
-                'video_url': video_url,
-                'transcription': transcription,
-                'filename': filename
+            # 更新历史记录中的转录状态和结果
+            history_id = None
+            # 查找对应的历史记录
+            history_ids = self.redis.zrange('recent_history', 0, -1)
+            for hid in history_ids:
+                data = self.redis.hgetall(hid)
+                if data.get('video_path') == filename:
+                    history_id = hid
+                    break
+                    
+            if history_id:
+                # 格式化转录文本
+                formatted_text = []
+                for sentence in transcription.get('sentences', []):
+                    start_time = self.format_time(sentence.get('begin_time', 0))
+                    end_time = self.format_time(sentence.get('end_time', 0))
+                    text = sentence.get('text', '').replace('<|[^>]+|>', '').strip()
+                    formatted_text.append(f"[{start_time} - {end_time}] {text}")
+                
+                transcription_text = '\n\n'.join(formatted_text)
+                
+                # 更新历史记录
+                self.redis.hmset(history_id, {
+                    'transcribed': '1',
+                    'transcription': transcription_text
+                })
+                
+            return {
+                'transcription': transcription
             }
-            
-            # 4. 保存到缓存
-            self._set_cache(cache_key, result)
-            
-            return result
             
         except Exception as e:
             print(f"视频处理失败: {str(e)}")
@@ -333,7 +374,8 @@ class VideoService:
                 "video_path": video_data.get('video_path', ''),
                 "duration": video_data.get('duration', '0:00'),
                 "created_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                "transcribed": "0"  # 使用字符串"0"代表False
+                "transcribed": "0",
+                "transcription_key": f"transcription:{history_id}"
             }
             
             # 将所有值转换为字符串
@@ -368,26 +410,29 @@ class VideoService:
             return []
 
     def delete_history(self, history_id):
-        """删除历史记录及对应的视频文件"""
+        """删除历史记录及相关数据"""
         try:
-            # 获取视频路径
-            video_data = self.redis.hgetall(history_id)
-            if not video_data:
+            # 获取历史记录
+            history_data = self.redis.hgetall(history_id)
+            if not history_data:
                 return False, "历史记录不存在"
                 
             # 删除视频文件
-            video_path = os.path.join(Config.RECORDS_FOLDER, video_data.get('video_path', ''))
+            video_path = os.path.join(Config.RECORDS_FOLDER, history_data.get('video_path', ''))
             if os.path.exists(video_path):
                 try:
                     os.remove(video_path)
                     print(f"已删除视频文件: {video_path}")
                 except Exception as e:
                     print(f"删除视频文件失败: {str(e)}")
-                    return False, f"删除视频文件失败: {str(e)}"
                     
-            # 从Redis中删除历史记录
+            # 删除转录结果
+            transcription_key = history_data.get('transcription_key')
+            if transcription_key:
+                self.redis.delete(transcription_key)
+                
+            # 删除历史记录
             self.redis.delete(history_id)
-            # 从最近记录列表中删除
             self.redis.zrem('recent_history', history_id)
             
             return True, "删除成功"
@@ -395,8 +440,53 @@ class VideoService:
             print(f"删除历史记录失败: {str(e)}")
             return False, str(e)
 
+    def save_transcription(self, history_id, transcription_data):
+        """保存转录结果"""
+        try:
+            # 获取历史记录
+            history_data = self.redis.hgetall(history_id)
+            if not history_data:
+                return False
+            
+            # 获取转录结果的key
+            transcription_key = history_data.get('transcription_key')
+            if not transcription_key:
+                return False
+            
+            # 保存转录结果
+            self.redis.set(transcription_key, json.dumps(transcription_data))
+            # 更新历史记录状态
+            self.redis.hset(history_id, 'transcribed', '1')
+            
+            return True
+        except Exception as e:
+            print(f"保存转录结果失败: {str(e)}")
+            return False
+
+    def get_transcription(self, history_id):
+        """获取转录结果"""
+        try:
+            # 获取历史记录
+            history_data = self.redis.hgetall(history_id)
+            if not history_data:
+                return None
+            
+            # 获取转录结果的key
+            transcription_key = history_data.get('transcription_key')
+            if not transcription_key:
+                return None
+            
+            # 获取转录结果
+            transcription_data = self.redis.get(transcription_key)
+            if transcription_data:
+                return json.loads(transcription_data)
+            return None
+        except Exception as e:
+            print(f"获取转录结果失败: {str(e)}")
+            return None
+
 # 测试代码
-if __name__ == "__main__":
+if __name__ == "__main__":  
     # 创建服务实例
     video_service = VideoService()
     

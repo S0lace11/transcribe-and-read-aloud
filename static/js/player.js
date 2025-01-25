@@ -8,6 +8,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // 从window.videoInfo获取视频信息
     const videoPath = window.videoInfo.path;
     const source = window.videoInfo.source;
+    const transcribed = window.videoInfo.transcribed === '1';
+    const transcription = window.videoInfo.transcription;
+
+    // 在页面加载时打印数据
+    console.log('Video Info:', window.videoInfo);
+    console.log('Transcribed:', window.videoInfo.transcribed);
+    console.log('Transcription:', window.videoInfo.transcription);
+
+    // 如果已经转录过，直接显示结果
+    if (transcribed && transcription) {
+        transcribeBtn.classList.add('d-none');
+        transcriptionText.value = transcription;
+        transcriptionContainer.classList.remove('d-none');
+    }
 
     // 转录按钮点击事件
     transcribeBtn.addEventListener('click', async function() {
