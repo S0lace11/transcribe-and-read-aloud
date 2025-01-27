@@ -277,12 +277,9 @@ button:disabled {
 
 /* 视频播放器容器样式 */
 .video-container {
-    margin: 20px 0;
+    max-width: 800px;
+    margin: 0 auto;
     background: #000;
-    border-radius: 8px;
-    overflow: hidden;
-    position: relative;
-    width: 100%;
 }
 
 .video-container.hidden {
@@ -291,9 +288,8 @@ button:disabled {
 
 /* Video.js播放器自定义样式 */
 .video-js {
-    width: 100% !important;
+    width: 800px !important;
     height: 450px !important;
-    position: relative !important;
 }
 
 .video-js .vjs-tech {
@@ -317,10 +313,16 @@ button:disabled {
     transform: translate(-50%, -50%);
 }
 
-/* 移动端响应式调整 */
-@media (max-width: 600px) {
+/* 确保视频播放器响应式但不超过最大尺寸 */
+@media (max-width: 800px) {
+    .video-container {
+        max-width: 100%;
+    }
+    
     .video-js {
-        height: 300px !important;
+        width: 100% !important;
+        height: calc((9/16) * 100vw) !important;
+        max-height: 450px !important;
     }
 }
 

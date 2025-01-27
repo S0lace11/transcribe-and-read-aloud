@@ -19,18 +19,19 @@
         </div>
 
         <!-- 视频播放器 -->
-        <div class="video-container">
+        <div class="video-container" style="max-width: 800px; margin: 0 auto;">
             <video 
                 id="video-player" 
                 class="video-js vjs-default-skin vjs-big-play-centered"
                 controls
                 preload="auto"
-                width="100%"
+                width="800"
                 height="450"
                 poster="{{ url_for('static', filename='images/poster.jpg') }}"
                 data-setup='{
-                    "fluid": true,
-                    "playbackRates": [0.5, 1, 1.5, 2]
+                    "fluid": false,
+                    "playbackRates": [0.5, 1, 1.5, 2],
+                    "aspectRatio": "16:9"
                 }'
             >
                 <source src="{{ video_url }}" type="video/mp4">
@@ -60,15 +61,18 @@
     <script src="https://cdn.bootcdn.net/ajax/libs/video.js/7.15.4/video.min.js"></script>
     <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script>
-        // 传递视频信息到player.js
         window.videoInfo = {
             path: "{{ video_path }}",
             source: "{{ source }}",
             url: "{{ video_url }}",
-            history_id: "{{ history_id }}",
-            transcribed: "{{ transcribed }}",
-            transcription: "{% if transcription %}{{ transcription | safe }}{% else %}null{% endif %}"
+            history_id: "{{ history_id if history_id else '' }}",
+            transcribed: "{{ transcribed if transcribed else '0' }}",
+            transcription: "{{ transcription | safe if transcription else 'null' }}"
         };
+        
+        // 添加调试信息
+        console.log('Video Info:', window.videoInfo);
+        console.log('URL Parameters:', new URLSearchParams(window.location.search).get('history_id'));
     </script>
     <script src="{{ url_for('static', filename='js/player.js') }}"></script>
 </body>

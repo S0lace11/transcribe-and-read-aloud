@@ -57,6 +57,7 @@ def process_upload():
             'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
         history_id = video_service.save_to_history(video_data)
+        print(f"[DEBUG] 生成的 history_id: {history_id} (类型: {type(history_id)})")  # 检查ID是否有效
         
         return jsonify({
             'success': True,
@@ -138,6 +139,13 @@ def player(video_path):
     """视频播放页面"""
     try:
         source = request.args.get('source', 'upload')
+        history_id = request.args.get('history_id')
+        
+        # 如果收到纯数字ID，添加前缀用于Redis查询
+        if history_id and history_id.isdigit():
+            redis_key = f"history:{history_id}"
+            video_data = video_service.redis.hgetall(redis_key)
+        
         # 检查文件是否存在
         video_file_path = os.path.join(Config.RECORDS_FOLDER, video_path)
         if not os.path.exists(video_file_path):
@@ -146,10 +154,23 @@ def player(video_path):
         # 构建视频URL
         video_url = f'/video/{video_path}'
         
+        # 获取转录状态和文本
+        transcribed = "0"
+        transcription = None
+        
+        if history_id:
+            # 从Redis获取视频信息
+            if video_data:
+                transcribed = video_data.get('transcribed', '0')
+                transcription = video_data.get('transcription', '')
+        
         return render_template('player.html', 
                              video_path=video_path,
                              video_url=video_url,
-                             source=source)
+                             source=source,
+                             history_id=history_id,  # 传递history_id到模板
+                             transcribed=transcribed,
+                             transcription=transcription)
     except Exception as e:
         print(f"播放器页面错误: {str(e)}")
         return str(e), 500

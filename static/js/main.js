@@ -72,6 +72,24 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // 处理上传成功的函数
+    function handleUploadSuccess(response) {
+        // 显示成功消息
+        showSuccess('上传成功！');
+        
+        // 刷新历史记录
+        loadRecentHistory();
+        
+        // 重置表单
+        fileInput.value = '';
+        fileMessage.textContent = '选择或拖放视频文件';
+        uploadBtn.disabled = true;
+        
+        // 保留调试信息
+        console.log('Upload Response:', response);
+        console.log('History ID:', response.history_id);
+    }
+
     // 处理文件上传
     uploadBtn.addEventListener('click', async function() {
         if (!fileInput.files.length) return;
@@ -91,9 +109,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const data = await response.json();
 
             if (response.ok) {
-                showSuccess('文件上传成功！');
-                // 刷新历史记录
-                loadRecentHistory();
+                handleUploadSuccess(data);  // 调用处理成功的函数
             } else {
                 showError(data.error || '上传失败');
             }
@@ -134,15 +150,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     updateDownloadProgress(data);
                 } else if (data.status === 'completed') {
                     eventSource.close();
-                    currentVideo = {
-                        filename: data.video_path,
-                        source: 'youtube'
-                    };
-                    showVideo(data.video_path);
-                    youtubeTranscribeBtn.classList.remove('d-none');
                     showSuccess('下载完成！');
-                    enableUI();  // 启用UI
-                    downloadProgress.classList.add('d-none');  // 隐藏进度条
+                    
+                    // 刷新历史记录
+                    loadRecentHistory();
+                    
+                    // 重置表单
+                    urlInput.value = '';
+                    enableUI();
+                    downloadProgress.classList.add('d-none');
                 } else if (data.status === 'error') {
                     showError(data.message);
                     eventSource.close();
@@ -383,8 +399,7 @@ document.addEventListener('DOMContentLoaded', function() {
         viewBtn.addEventListener('click', () => {
             const video = viewBtn.dataset.video;
             const source = viewBtn.dataset.source;
-            // 修改跳转URL格式
-            window.location.href = `/player/${encodeURIComponent(video)}?source=${encodeURIComponent(source)}`;
+            viewVideo(video, item.id);
         });
         
         // 添加删除按钮点击事件
@@ -433,4 +448,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 页面加载时获取历史记录
     loadRecentHistory();
+
+    // 查看视频的函数（在历史记录卡片中使用）
+    function viewVideo(videoPath, historyId) {
+        // 保留调试信息
+        console.log('View Video:', videoPath);
+        console.log('History ID:', historyId);
+        
+        window.location.href = `/player/${encodeURIComponent(videoPath)}?history_id=${encodeURIComponent(historyId)}`;
+    }
 }); 

@@ -364,7 +364,7 @@ class VideoService:
         """保存视频到历史记录"""
         try:
             # 生成历史记录ID
-            history_id = f"history:{int(time.time())}"
+            history_id = f"{int(time.time())}"
             
             # 准备历史记录数据
             history_data = {
@@ -446,19 +446,25 @@ class VideoService:
             # 获取历史记录
             history_data = self.redis.hgetall(history_id)
             if not history_data:
+                print(f"未找到历史记录: {history_id}")
                 return False
             
-            # 获取转录结果的key
-            transcription_key = history_data.get('transcription_key')
-            if not transcription_key:
-                return False
+            # 生成转录结果的key
+            transcription_key = f"transcription:{history_id}"
             
             # 保存转录结果
             self.redis.set(transcription_key, json.dumps(transcription_data))
-            # 更新历史记录状态
-            self.redis.hset(history_id, 'transcribed', '1')
             
+            # 更新历史记录
+            update_data = {
+                'transcribed': '1',
+                'transcription_key': transcription_key
+            }
+            self.redis.hmset(history_id, update_data)
+            
+            print(f"转录结果已保存: {history_id}")  # 调试日志
             return True
+            
         except Exception as e:
             print(f"保存转录结果失败: {str(e)}")
             return False
@@ -466,21 +472,16 @@ class VideoService:
     def get_transcription(self, history_id):
         """获取转录结果"""
         try:
-            # 获取历史记录
-            history_data = self.redis.hgetall(history_id)
-            if not history_data:
+            if not history_id:
                 return None
             
-            # 获取转录结果的key
-            transcription_key = history_data.get('transcription_key')
-            if not transcription_key:
-                return None
+            transcription_key = f"transcription:{history_id}"
+            transcription = self.redis.get(transcription_key)
             
-            # 获取转录结果
-            transcription_data = self.redis.get(transcription_key)
-            if transcription_data:
-                return json.loads(transcription_data)
+            if transcription:
+                return json.loads(transcription)
             return None
+            
         except Exception as e:
             print(f"获取转录结果失败: {str(e)}")
             return None
