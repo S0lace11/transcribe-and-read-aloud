@@ -17,10 +17,12 @@ import time
 from moviepy.editor import VideoFileClip
 import requests
 from datetime import datetime
+import re
 
 class VideoService:
     """视频服务类
     提供视频文件的处理、上传和转录功能
+
     """
     
     def __init__(self):
@@ -294,21 +296,32 @@ class VideoService:
                     
             if history_id:
                 # 格式化转录文本
+                plain_text = []
                 formatted_text = []
                 for sentence in transcription.get('sentences', []):
                     start_time = self.format_time(sentence.get('begin_time', 0))
                     end_time = self.format_time(sentence.get('end_time', 0))
-                    text = sentence.get('text', '').replace('<|[^>]+|>', '').strip()
+                    text = re.sub(r'<\|[^>]+\|>', '', sentence.get('text', '')).strip()
+                    
+                    # 保存纯文本和带时间戳的格式化文本
+                    plain_text.append(text)
                     formatted_text.append(f"[{start_time} - {end_time}] {text}")
+            
+                # 生成最终文本
+                plain_text = '\n\n'.join(plain_text)  # 纯文本，没有标签和时间戳
+                transcription_text = '\n\n'.join(formatted_text)  # 带时间戳的文本
                 
-                transcription_text = '\n\n'.join(formatted_text)
+                print("保存到Redis的纯文本:", plain_text)  # 调试日志
+                print("保存到Redis的原始文本:", transcription_text)  # 调试日志
                 
                 # 更新历史记录
                 self.redis.hmset(history_id, {
                     'transcribed': '1',
-                    'transcription': transcription_text
+                    'transcription': plain_text,
+                    'origin': transcription_text
                 })
                 
+
             return {
                 'transcription': transcription
             }
@@ -375,9 +388,12 @@ class VideoService:
                 "duration": video_data.get('duration', '0:00'),
                 "created_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 "transcribed": "0",
-                "transcription_key": f"transcription:{history_id}"
+                "transcription_key": f"transcription:{history_id}",
+                "transcription": "",
+                "origin": ""
             }
             
+
             # 将所有值转换为字符串
             history_data = {k: str(v) for k, v in history_data.items()}
             
@@ -492,7 +508,7 @@ if __name__ == "__main__":
     video_service = VideoService()
     
     # 测试视频处理
-    video_path = "F:\\MyProjects\\graduate project\\downloads\\test.mp4"  # 替换为实际的视频路径
+    video_path = ""  # 替换为实际的视频路径
     
     if os.path.exists(video_path):
         result = video_service.process_video(video_path)

@@ -11,15 +11,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const transcribed = window.videoInfo.transcribed === '1';
     const transcription = window.videoInfo.transcription;
 
-    // 在页面加载时打印数据
-    console.log('Video Info:', window.videoInfo);
-    console.log('Transcribed:', window.videoInfo.transcribed);
-    console.log('Transcription:', window.videoInfo.transcription);
+    console.log('Video Info:', window.videoInfo);  // 调试日志
 
     // 如果已经转录过，直接显示结果
     if (transcribed && transcription) {
         transcribeBtn.classList.add('d-none');
-        transcriptionText.value = transcription;
+        transcriptionText.value = transcription;  // 直接使用Redis中的纯文本
         transcriptionContainer.classList.remove('d-none');
     }
 
@@ -84,19 +81,21 @@ document.addEventListener('DOMContentLoaded', function() {
         info.classList.remove('d-none');
     }
 
+    // updateTranscription 只在新转录时使用
     function updateTranscription(data) {
-        if (data.transcription && Array.isArray(data.transcription.sentences)) {
+        if (data && data.transcription && Array.isArray(data.transcription.sentences)) {
             const sentences = data.transcription.sentences;
-            sentences.sort((a, b) => a.begin_time - b.begin_time);
             
-            const formattedText = sentences.map(sentence => {
-                const startTime = formatTime(sentence.begin_time);
-                const endTime = formatTime(sentence.end_time);
-                const cleanText = sentence.text.replace(/<\|[^>]+\|>/g, '').trim();
-                return `[${startTime} - ${endTime}] ${cleanText}`;
+            // 只提取纯文本
+            const plainText = sentences.map(sentence => {
+                return sentence.text.replace(/<\|[^>]+\|>/g, '').trim();
             }).join('\n\n');
             
-            transcriptionText.value = formattedText;
+            // 更新显示
+            transcriptionText.value = plainText;
+            transcriptionContainer.classList.remove('d-none');
+            
+            console.log('显示的转录文本:', plainText);  // 调试日志
         }
     }
 

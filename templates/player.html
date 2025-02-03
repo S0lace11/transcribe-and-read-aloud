@@ -67,7 +67,7 @@
             url: "{{ video_url }}",
             history_id: "{{ history_id if history_id else '' }}",
             transcribed: "{{ transcribed if transcribed else '0' }}",
-            transcription: "{{ transcription | safe if transcription else 'null' }}"
+            transcription: {% if transcription %}{{ transcription | tojson | safe }}{% else %}null{% endif %}
         };
         
         // 添加调试信息

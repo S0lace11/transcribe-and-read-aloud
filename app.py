@@ -159,16 +159,22 @@ def player(video_path):
         transcription = None
         
         if history_id:
-            # 从Redis获取视频信息
+            # 获取视频信息
+            video_data = video_service.redis.hgetall(history_id)
+            print("Redis数据:", video_data)  # 添加调试日志
+            
             if video_data:
                 transcribed = video_data.get('transcribed', '0')
+                # 直接获取纯文本转录结果
                 transcription = video_data.get('transcription', '')
+                print("转录状态:", transcribed)   # 添加调试日志
+                print("转录文本:", transcription) # 添加调试日志
         
-        return render_template('player.html', 
+        return render_template('player.html',
                              video_path=video_path,
                              video_url=video_url,
                              source=source,
-                             history_id=history_id,  # 传递history_id到模板
+                             history_id=history_id,
                              transcribed=transcribed,
                              transcription=transcription)
     except Exception as e:
