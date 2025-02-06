@@ -277,9 +277,10 @@ button:disabled {
 
 /* 视频播放器容器样式 */
 .video-container {
-    max-width: 800px;
-    margin: 0 auto;
-    background: #000;
+    max-width: 100%;  /* 限制最大宽度为容器宽度 */
+    margin: 0 auto;   /* 居中显示 */
+    position: relative;
+    padding: 0;       /* 移除内边距 */
 }
 
 .video-container.hidden {
@@ -288,8 +289,10 @@ button:disabled {
 
 /* Video.js播放器自定义样式 */
 .video-js {
-    width: 800px !important;
-    height: 450px !important;
+    width: 100% !important;    /* 强制宽度为100% */
+    height: auto !important;    /* 高度自适应 */
+    max-height: 70vh;          /* 限制最大高度为视窗高度的70% */
+    aspect-ratio: 16/9;        /* 保持16:9的宽高比 */
 }
 
 .video-js .vjs-tech {
@@ -313,16 +316,14 @@ button:disabled {
     transform: translate(-50%, -50%);
 }
 
-/* 确保视频播放器响应式但不超过最大尺寸 */
-@media (max-width: 800px) {
+/* 响应式调整 */
+@media (max-width: 768px) {
     .video-container {
-        max-width: 100%;
+        padding: 0 15px;  /* 在小屏幕上添加一些边距 */
     }
     
     .video-js {
-        width: 100% !important;
-        height: calc((9/16) * 100vw) !important;
-        max-height: 450px !important;
+        max-height: 50vh;  /* 在小屏幕上减小最大高度 */
     }
 }
 
@@ -481,4 +482,19 @@ button:disabled {
     .history-card {
         margin-bottom: 1rem;
     }
+}
+
+/* 转录结果容器样式 */
+#transcription-container {
+    max-width: 100%;
+    margin: 20px auto;
+    padding: 0 15px;
+}
+
+/* 转录文本区域样式 */
+#transcription-text {
+    width: 100%;
+    max-width: 800px;  /* 与视频播放器宽度保持一致 */
+    margin: 0 auto;
+    display: block;
 } 

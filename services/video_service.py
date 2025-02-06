@@ -85,30 +85,6 @@ class VideoService:
             print(f"Redis连接失败: {str(e)}")
             raise
             
-    def _get_cache(self, key):
-        """获取缓存数据"""
-        try:
-            data = self.redis.get(key)
-            return json.loads(data) if data else None
-        except Exception as e:
-            print(f"获取缓存失败: {str(e)}")
-            return None
-            
-    def _set_cache(self, key, data, expire=None):
-        """设置缓存数据"""
-        try:
-            if expire is None:
-                expire = Config.REDIS_CACHE_TTL
-                
-            self.redis.setex(
-                key,
-                expire,
-                json.dumps(data)
-            )
-            return True
-        except Exception as e:
-            print(f"设置缓存失败: {str(e)}")
-            return False
             
     def check_video(self, video_path):
         """检查视频文件是否有效且可以处理
@@ -351,27 +327,7 @@ class VideoService:
             print(f"获取视频信息失败: {str(e)}")
             return None
 
-    def clear_cache(self, filename):
-        """清除指定视频的缓存"""
-        try:
-            cache_key = f"video:transcription:{filename}"
-            self.redis.delete(cache_key)
-            return True
-        except Exception as e:
-            print(f"清除缓存失败: {str(e)}")
-            return False
-            
-    def clear_all_cache(self):
-        """清除所有视频转录缓存"""
-        try:
-            pattern = "video:transcription:*"
-            keys = self.redis.keys(pattern)
-            if keys:
-                self.redis.delete(*keys)
-            return True
-        except Exception as e:
-            print(f"清除所有缓存失败: {str(e)}")
-            return False
+
 
     def save_to_history(self, video_data):
         """保存视频到历史记录"""
@@ -456,51 +412,7 @@ class VideoService:
             print(f"删除历史记录失败: {str(e)}")
             return False, str(e)
 
-    def save_transcription(self, history_id, transcription_data):
-        """保存转录结果"""
-        try:
-            # 获取历史记录
-            history_data = self.redis.hgetall(history_id)
-            if not history_data:
-                print(f"未找到历史记录: {history_id}")
-                return False
-            
-            # 生成转录结果的key
-            transcription_key = f"transcription:{history_id}"
-            
-            # 保存转录结果
-            self.redis.set(transcription_key, json.dumps(transcription_data))
-            
-            # 更新历史记录
-            update_data = {
-                'transcribed': '1',
-                'transcription_key': transcription_key
-            }
-            self.redis.hmset(history_id, update_data)
-            
-            print(f"转录结果已保存: {history_id}")  # 调试日志
-            return True
-            
-        except Exception as e:
-            print(f"保存转录结果失败: {str(e)}")
-            return False
 
-    def get_transcription(self, history_id):
-        """获取转录结果"""
-        try:
-            if not history_id:
-                return None
-            
-            transcription_key = f"transcription:{history_id}"
-            transcription = self.redis.get(transcription_key)
-            
-            if transcription:
-                return json.loads(transcription)
-            return None
-            
-        except Exception as e:
-            print(f"获取转录结果失败: {str(e)}")
-            return None
 
 # 测试代码
 if __name__ == "__main__":  

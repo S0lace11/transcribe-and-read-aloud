@@ -81,8 +81,13 @@ class HistoryManager {
         // 填充数据
         template.querySelector('.video-title').textContent = item.title;
         template.querySelector('.video-source').textContent = item.source;
-        template.querySelector('.video-time').textContent = this.formatTime(item.timestamp);
-        template.querySelector('.text-preview').textContent = item.text_preview;
+        template.querySelector('.video-time').textContent = this.formatTime(item.created_at);
+        template.querySelector('.text-preview').textContent = item.text_preview || '暂无转录文本';
+        
+        // 设置转录状态
+        const transcribed = item.transcribed === '1';
+        template.querySelector('.transcribe-status').textContent = transcribed ? '已转录' : '未转录';
+        template.querySelector('.transcribe-status').classList.toggle('text-success', transcribed);
         
         return template;
     }

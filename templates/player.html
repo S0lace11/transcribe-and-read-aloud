@@ -19,17 +19,14 @@
         </div>
 
         <!-- 视频播放器 -->
-        <div class="video-container" style="max-width: 800px; margin: 0 auto;">
+        <div class="video-container">
             <video 
                 id="video-player" 
                 class="video-js vjs-default-skin vjs-big-play-centered"
                 controls
                 preload="auto"
-                width="800"
-                height="450"
-                poster="{{ url_for('static', filename='images/poster.jpg') }}"
                 data-setup='{
-                    "fluid": false,
+                    "fluid": true,
                     "playbackRates": [0.5, 1, 1.5, 2],
                     "aspectRatio": "16:9"
                 }'
