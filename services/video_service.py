@@ -85,6 +85,15 @@ class VideoService:
             print(f"Redis连接失败: {str(e)}")
             raise
             
+    # 新增私有方法：构建带前缀的历史记录 key
+    def _build_history_key(self, raw_id):
+        """构建带前缀的历史记录key"""
+        return f"video:{raw_id}"
+    
+    # 新增私有方法：获取带前缀的最近历史记录sorted set key
+    def _get_recent_history_key(self):
+        """获取带前缀的最近历史记录sorted set key"""
+        return "video:recent_history"
             
     def check_video(self, video_path):
         """检查视频文件是否有效且可以处理
@@ -262,8 +271,8 @@ class VideoService:
                 
             # 更新历史记录中的转录状态和结果
             history_id = None
-            # 查找对应的历史记录
-            history_ids = self.redis.zrange('recent_history', 0, -1)
+            # 查找对应的历史记录，使用带前缀的recent_history key
+            history_ids = self.redis.zrange(self._get_recent_history_key(), 0, -1)
             for hid in history_ids:
                 data = self.redis.hgetall(hid)
                 if data.get('video_path') == filename:
@@ -332,8 +341,10 @@ class VideoService:
     def save_to_history(self, video_data):
         """保存视频到历史记录"""
         try:
-            # 生成历史记录ID
-            history_id = f"{int(time.time())}"
+            # 生成原始历史记录ID
+            raw_history_id = f"{int(time.time())}"
+            # 构建带前缀的历史记录 key
+            history_id = self._build_history_key(raw_history_id)
             
             # 准备历史记录数据
             history_data = {
@@ -353,10 +364,10 @@ class VideoService:
             # 将所有值转换为字符串
             history_data = {k: str(v) for k, v in history_data.items()}
             
-            # 保存到Redis
+            # 保存到Redis，key 使用带前缀的 history_id
             self.redis.hmset(history_id, history_data)
-            # 添加到最近记录列表
-            self.redis.zadd('recent_history', {history_id: time.time()})
+            # 添加到最近记录列表，使用带前缀的sorted set key
+            self.redis.zadd(self._get_recent_history_key(), {history_id: time.time()})
             
             return history_id
         except Exception as e:
@@ -366,8 +377,8 @@ class VideoService:
     def get_recent_history(self, limit=10):
         """获取最近的历史记录"""
         try:
-            # 获取最近的历史记录ID
-            history_ids = self.redis.zrevrange('recent_history', 0, limit-1)
+            # 获取最近的历史记录ID，使用带前缀的sorted set key
+            history_ids = self.redis.zrevrange(self._get_recent_history_key(), 0, limit-1)
             
             # 获取详细信息
             history_list = []
@@ -405,7 +416,7 @@ class VideoService:
                 
             # 删除历史记录
             self.redis.delete(history_id)
-            self.redis.zrem('recent_history', history_id)
+            self.redis.zrem(self._get_recent_history_key(), history_id)
             
             return True, "删除成功"
         except Exception as e:
