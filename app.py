@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory, Response, redirect, send_file
+from flask_restful import Api, Resource
 from services.video_service import VideoService
 from services.youtube_service import YouTubeService
 from config import Config
@@ -9,10 +10,14 @@ import json
 import threading
 from werkzeug.utils import secure_filename
 from datetime import datetime
+from resources.history_resource import HistoryResource, RecentHistoryResource, HistoryDetailResource
 
 app = Flask(__name__)
 video_service = VideoService()
 youtube_service = YouTubeService()
+api = Api(app)
+
+
 
 @app.route('/')
 def index():
@@ -216,53 +221,58 @@ def transcribe():
         print(f"处理视频转录时出错: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/history')
-def get_history():
-    try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 10, type=int)
+# @app.route('/api/history')
+# def get_history():
+#     try:
+#         page = request.args.get('page', 1, type=int)
+#         per_page = request.args.get('per_page', 10, type=int)
         
-        # 获取历史记录列表
-        start = (page - 1) * per_page
-        end = start + per_page - 1
+#         # 获取历史记录列表
+#         start = (page - 1) * per_page
+#         end = start + per_page - 1
         
-        # 获取ID列表
-        video_ids = video_service.redis.zrevrange("history:list", start, end)
+#         # 获取ID列表
+#         video_ids = video_service.redis.zrevrange("history:list", start, end)
         
-        # 获取详细信息
-        history_list = []
-        for video_id in video_ids:
-            details = video_service.redis.hgetall(f"history:detail:{video_id}")
-            if details:
-                details['id'] = video_id
-                history_list.append(details)
+#         # 获取详细信息
+#         history_list = []
+#         for video_id in video_ids:
+#             details = video_service.redis.hgetall(f"history:detail:{video_id}")
+#             if details:
+#                 details['id'] = video_id
+#                 history_list.append(details)
         
-        return jsonify({
-            'items': history_list,
-            'page': page,
-            'per_page': per_page
-        })
+#         return jsonify({
+#             'items': history_list,
+#             'page': page,
+#             'per_page': per_page
+#         })
         
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+#     except Exception as e:
+#         return jsonify({'error': str(e)}), 500
+    
+api.add_resource(HistoryResource, '/api/history') # 添加 HistoryResource 到 /api/history 路由
 
-@app.route('/api/history/recent')
-def get_recent_history():
-    """获取最近的历史记录"""
-    try:
-        # 获取最近10条历史记录
-        history_list = video_service.get_recent_history(limit=10)
+
+# @app.route('/api/history/recent')
+# def get_recent_history():
+#     """获取最近的历史记录"""
+#     try:
+#         # 获取最近10条历史记录
+#         history_list = video_service.get_recent_history(limit=10)
         
-        return jsonify({
-            'success': True,
-            'history': history_list
-        })
+#         return jsonify({
+#             'success': True,
+#             'history': history_list
+#         })
         
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+#     except Exception as e:
+#         return jsonify({
+#             'success': False,
+#             'error': str(e)
+#         }), 500
+    
+api.add_resource(RecentHistoryResource, '/api/history/recent')
 
 @app.route('/api/history/<history_id>', methods=['DELETE'])
 def delete_history(history_id):

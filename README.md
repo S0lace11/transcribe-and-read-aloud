@@ -1,4 +1,4 @@
-# 视频文本同步工具
+# 视频文本同步跟读
 
 一个基于 Flask 的 Web 应用，可以将视频内容转换为文本，并实现视频播放与文本实时同步高亮显示。
 
@@ -64,7 +64,6 @@
 - 未转录的视频可以启动转录
 - 已转录的视频可以直接查看文本
 - 支持删除历史记录
-- 支持导出历史记录
 
 ## 技术栈
 
@@ -108,53 +107,25 @@
 - CSS3 (样式和动画)
 - JavaScript (视频文本同步)
 
-## 项目结构
-graduate_project/ # 项目根目录
-│
-├── app.py # Flask主应用程序
-│ ├── process_upload() # 处理上传视频
-│ ├── process_youtube() # 处理YouTube视频
-│ ├── get_progress() # 获取下载进度
-│ ├── serve_video() # 提供视频文件服务
-│ └── get_history() # 获取历史记录
-│
-├── config.py # 配置文件
-│ ├── BASE_DIR # 项目根目录
-│ ├── UPLOAD_FOLDER # 上传文件目录
-│ ├── DOWNLOAD_FOLDER # 下载文件目录
-│ ├── OSS配置 # 阿里云OSS配置
-│ ├── DashScope配置 # 阿里云转写服务配置
-│ └── HISTORY_LIMIT # 历史记录保存数量限制
-│
-├── services/ # 服务层目录
-│ ├── init.py
-│ ├── video_service.py # 视频处理服务
-│ │ ├── upload_video() # 上传视频到OSS
-│ │ ├── transcribe_video() # 视频转写
-│ │ ├── process_video() # 完整视频处理流程
-│ │ ├── save_history() # 保存历史记录
-│ │ └── get_history() # 获取历史记录
-│ │
-│ └── youtube_service.py # YouTube下载服务
-│
-├── static/ # 静态文件目录
-│ ├── css/
-│ │ ├── styles.css # 主样式表
-│ │ ├── player.css # 播放器样式
-│ │ └── history.css # 历史记录样式
-│ │
-│ └── js/
-│ ├── main.js # 主页面脚本
-│ ├── player.js # 播放器脚本
-│ └── history.js # 历史记录处理脚本
-│
-├── templates/ # 模板目录
-│ ├── index.html # 主页面
-│ ├── player.html # 播放器页面
-│ └── history.html # 历史记录页面
-│
-├── uploads/ # 上传文件临时存储目录
-├── downloads/ # YouTube下载文件存储目录
-│
+project/
+├── app.py # Flask 应用入口
+├── config.py # 配置文件，包括目录、Redis 等设置
+├── requirements.txt # 项目依赖
 ├── .env # 环境变量配置
-└── requirements.txt # 项目依赖
+├── Readme.md # 项目说明文件
+├── records/ # 视频记录目录（由 Config.init_folders 创建）
+├── services/
+│ ├── video_service.py # 视频处理服务模块（处理上传、转录、OSS存储等）
+│ └── youtube_service.py # YouTube 视频处理服务模块
+├── static/
+│ ├── css/
+│ │ ├── style.css # 全局样式及页面基础样式
+│ │ └── history.css # 历史记录区域样式
+│ ├── js/
+│ │ ├── player.js # 视频播放器相关逻辑
+│ │ ├── history.js # 历史记录管理脚本
+│ │ └── main.js # 首页逻辑（入口 JavaScript 文件）
+│ └── (其他静态资源)
+└── templates/
+├── index.html # 首页模板（包含 YouTube 下载、本地上传及历史记录展示）
+└── player.html # 视频播放页面模板（提供播放器和转录结果显示）
