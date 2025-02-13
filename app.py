@@ -1,16 +1,17 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory, Response, redirect, send_file
-from flask_restful import Api, Resource
+from flask_restful import Api
 from services.video_service import VideoService
 from services.youtube_service import YouTubeService
 from config import Config
 import os
-import uuid
-import time
-import json
-import threading
-from werkzeug.utils import secure_filename
-from datetime import datetime
 from resources.history_resource import HistoryResource, RecentHistoryResource, HistoryDetailResource
+from resources.transcription_resource import TranscribeVideoResource
+from resources.upload_resource import UploadVideoResource
+from resources.youtube_resource import YoutubeDownloadResource
+from resources.progress_resource import ProgressResource
+from resources.video_file_resource import VideoFileResource
+from resources.player_resource import PlayerResource
+
 
 app = Flask(__name__)
 video_service = VideoService()
@@ -23,254 +24,102 @@ api = Api(app)
 def index():
     return render_template('index.html')
 
-@app.route('/upload', methods=['POST'])
-def process_upload():
-    """处理上传的视频文件，只保存到本地"""
-    try:
-        if 'file' not in request.files:
-            return jsonify({'error': '没有上传文件'}), 400
-            
-        video_file = request.files['file']
-        if video_file.filename == '':
-            return jsonify({'error': '没有选择文件'}), 400
-            
-        # 检查文件类型
-        if not video_file.filename.lower().endswith('.mp4'):
-            return jsonify({'error': '只支持MP4格式的视频'}), 400
-            
-        # 直接使用原始文件名，但确保安全
-        filename = secure_filename(video_file.filename)
-        file_path = os.path.join(Config.RECORDS_FOLDER, filename)
-        
-        # 如果文件已存在，添加数字后缀
-        base, ext = os.path.splitext(filename)
-        counter = 1
-        while os.path.exists(file_path):
-            filename = f"{base}_{counter}{ext}"
-            file_path = os.path.join(Config.RECORDS_FOLDER, filename)
-            counter += 1
-        
-        video_file.save(file_path)
-        print(f"文件已保存到: {file_path}")
-        
-        # 保存到历史记录
-        video_data = {
-            'title': filename,
-            'source': 'upload',
-            'video_path': filename,
-            'duration': '0:00',  # 这里先设置默认值，后续可以通过视频元数据更新
-            'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-        history_id = video_service.save_to_history(video_data)
-        print(f"[DEBUG] 生成的 history_id: {history_id} (类型: {type(history_id)})")  # 检查ID是否有效
-        
-        return jsonify({
-            'success': True,
-            'message': '文件上传成功',
-            'title': filename,
-            'history_id': history_id
-        })
-        
-    except Exception as e:
-        print(f"处理上传视频时出错: {str(e)}")
-        return jsonify({'error': str(e)}), 500
 
-@app.route('/download', methods=['POST'])
-def download_youtube():
-    """处理YouTube视频下载，保存到records文件夹并记录历史"""
-    try:
-        url = request.json.get('url')
-        if not url:
-            return jsonify({'error': '请提供YouTube视频链接'}), 400
-            
-        # 生成任务ID
-        task_id = str(int(time.time()))
-        
-        # 在新线程中启动下载
-        def download_and_save_history():
-            try:
-                # 下载视频
-                video_info = youtube_service.download_video(url, task_id)
-                
-                if video_info:
-                    # 保存到历史记录
-                    video_data = {
-                        'title': video_info['title'],
-                        'source': 'youtube',
-                        'video_path': video_info['filename'],
-                        'duration': video_info['duration'],
-                        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    }
-                    video_service.save_to_history(video_data)
-            except Exception as e:
-                print(f"下载和保存历史记录失败: {str(e)}")
-                
-        thread = threading.Thread(target=download_and_save_history)
-        thread.daemon = True
-        thread.start()
-        
-        return jsonify({
-            'success': True,
-            'message': '开始下载视频',
-            'task_id': task_id
-        })
-        
-    except Exception as e:
-        print(f"处理YouTube视频时出错: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+api.add_resource(UploadVideoResource, '/upload') 
+api.add_resource(YoutubeDownloadResource, '/download')
+api.add_resource(ProgressResource, '/progress/<task_id>')
 
-@app.route('/progress/<task_id>')
-def get_progress(task_id):
-    """获取YouTube下载进度"""
-    def generate():
-        progress_queue = youtube_service.get_progress_queue(task_id)
-        if not progress_queue:
-            yield f"data: {json.dumps({'error': '任务不存在'})}\n\n"
-            return
-            
-        try:
-            while True:
-                progress = progress_queue.get()
-                if progress is None:  # 下载完成
-                    break
-                yield f"data: {json.dumps(progress)}\n\n"
-        finally:
-            youtube_service.remove_progress_queue(task_id)
-            
-    return Response(generate(), mimetype='text/event-stream')
-
-@app.route('/player/<path:video_path>')
-def player(video_path):
-    """视频播放页面"""
-    try:
-        source = request.args.get('source', 'upload')
-        history_id = request.args.get('history_id')
-        
-        # 如果收到纯数字ID，添加前缀用于Redis查询
-        if history_id and history_id.isdigit():
-            redis_key = f"history:{history_id}"
-            video_data = video_service.redis.hgetall(redis_key)
-        
-        # 检查文件是否存在
-        video_file_path = os.path.join(Config.RECORDS_FOLDER, video_path)
-        if not os.path.exists(video_file_path):
-            return "视频文件不存在", 404
-            
-        # 构建视频URL
-        video_url = f'/video/{video_path}'
-        
-        # 获取转录状态和文本
-        transcribed = "0"
-        transcription = None
-        
-        if history_id:
-            # 获取视频信息
-            video_data = video_service.redis.hgetall(history_id)
-            print("Redis数据:", video_data)  # 添加调试日志
-            
-            if video_data:
-                transcribed = video_data.get('transcribed', '0')
-                # 直接获取纯文本转录结果
-                transcription = video_data.get('transcription', '')
-                print("转录状态:", transcribed)   # 添加调试日志
-                print("转录文本:", transcription) # 添加调试日志
-        
-        return render_template('player.html',
-                             video_path=video_path,
-                             video_url=video_url,
-                             source=source,
-                             history_id=history_id,
-                             transcribed=transcribed,
-                             transcription=transcription)
-    except Exception as e:
-        print(f"播放器页面错误: {str(e)}")
-        return str(e), 500
-
-@app.route('/video/<path:filename>')
-def serve_video(filename):
-    """提供视频文件服务"""
-    try:
-        return send_from_directory(Config.RECORDS_FOLDER, filename)
-    except Exception as e:
-        print(f"视频服务出错: {str(e)}")
-        return str(e), 500
-
-@app.route('/transcribe', methods=['POST'])
-def transcribe():
-    """处理视频转录请求"""
-    try:
-        data = request.json
-        if not data or 'filename' not in data or 'source' not in data:
-            return jsonify({'error': '缺少必要的参数'}), 400
-            
-        filename = data['filename']
-        source = data['source']
-        
-        # 处理视频转录
-        result = video_service.process_video(filename, source_type=source)
-        if not result:
-            return jsonify({'error': '视频转录失败'}), 500
-        
-        return jsonify({
-            'success': True,
-            'message': '转录成功',
-            'transcription': result['transcription']
-        })
-        
-    except Exception as e:
-        print(f"处理视频转录时出错: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-# @app.route('/api/history')
-# def get_history():
+# @app.route('/player/<path:video_path>')
+# def player(video_path):
+#     """视频播放页面"""
 #     try:
-#         page = request.args.get('page', 1, type=int)
-#         per_page = request.args.get('per_page', 10, type=int)
+#         source = request.args.get('source', 'upload')
+#         history_id = request.args.get('history_id')
         
-#         # 获取历史记录列表
-#         start = (page - 1) * per_page
-#         end = start + per_page - 1
+#         # 如果收到纯数字ID，添加前缀用于Redis查询
+#         if history_id and history_id.isdigit():
+#             redis_key = f"history:{history_id}"
+#             video_data = video_service.redis.hgetall(redis_key)
         
-#         # 获取ID列表
-#         video_ids = video_service.redis.zrevrange("history:list", start, end)
+#         # 检查文件是否存在
+#         video_file_path = os.path.join(Config.RECORDS_FOLDER, video_path)
+#         if not os.path.exists(video_file_path):
+#             return "视频文件不存在", 404
+            
+#         # 构建视频URL
+#         video_url = f'/video/{video_path}'
         
-#         # 获取详细信息
-#         history_list = []
-#         for video_id in video_ids:
-#             details = video_service.redis.hgetall(f"history:detail:{video_id}")
-#             if details:
-#                 details['id'] = video_id
-#                 history_list.append(details)
+#         # 获取转录状态和文本
+#         transcribed = "0"
+#         transcription = None
+        
+#         if history_id:
+#             # 获取视频信息
+#             video_data = video_service.redis.hgetall(history_id)
+#             print("Redis数据:", video_data)  # 添加调试日志
+            
+#             if video_data:
+#                 transcribed = video_data.get('transcribed', '0')
+#                 # 直接获取纯文本转录结果
+#                 transcription = video_data.get('transcription', '')
+#                 print("转录状态:", transcribed)   # 添加调试日志
+#                 print("转录文本:", transcription) # 添加调试日志
+        
+#         return render_template('player.html',
+#                              video_path=video_path,
+#                              video_url=video_url,
+#                              source=source,
+#                              history_id=history_id,
+#                              transcribed=transcribed,
+#                              transcription=transcription)
+#     except Exception as e:
+#         print(f"播放器页面错误: {str(e)}")
+#         return str(e), 500
+    
+api.add_resource(PlayerResource, '/player/<path:video_path>')
+
+# @app.route('/video/<path:filename>')
+# def serve_video(filename):
+#     """提供视频文件服务"""
+#     try:
+#         return send_from_directory(Config.RECORDS_FOLDER, filename)
+#     except Exception as e:
+#         print(f"视频服务出错: {str(e)}")
+#         return str(e), 500
+    
+api.add_resource(VideoFileResource, '/video/<path:filename>')
+
+# @app.route('/transcribe', methods=['POST'])
+# def transcribe():
+#     """处理视频转录请求"""
+#     try:
+#         data = request.json
+#         if not data or 'filename' not in data or 'source' not in data:
+#             return jsonify({'error': '缺少必要的参数'}), 400
+            
+#         filename = data['filename']
+#         source = data['source']
+        
+#         # 处理视频转录
+#         result = video_service.process_video(filename, source_type=source)
+#         if not result:
+#             return jsonify({'error': '视频转录失败'}), 500
         
 #         return jsonify({
-#             'items': history_list,
-#             'page': page,
-#             'per_page': per_page
+#             'success': True,
+#             'message': '转录成功',
+#             'transcription': result['transcription']
 #         })
         
 #     except Exception as e:
+#         print(f"处理视频转录时出错: {str(e)}")
 #         return jsonify({'error': str(e)}), 500
+
+api.add_resource(TranscribeVideoResource, '/transcribe')
     
 api.add_resource(HistoryResource, '/api/history') # 添加 HistoryResource 到 /api/history 路由
 
 
-# @app.route('/api/history/recent')
-# def get_recent_history():
-#     """获取最近的历史记录"""
-#     try:
-#         # 获取最近10条历史记录
-#         history_list = video_service.get_recent_history(limit=10)
-        
-#         return jsonify({
-#             'success': True,
-#             'history': history_list
-#         })
-        
-#     except Exception as e:
-#         return jsonify({
-#             'success': False,
-#             'error': str(e)
-#         }), 500
     
 api.add_resource(RecentHistoryResource, '/api/history/recent')
 
