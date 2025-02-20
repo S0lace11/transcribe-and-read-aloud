@@ -15,7 +15,7 @@ class YoutubeDownloadResource(Resource):
 
             def download_and_save_history():
                 try:
-                    from app import youtube_service, video_service  # 延迟导入
+                    from app import youtube_service, video_service, current_user  # 延迟导入
 
                     video_info = youtube_service.download_video(url, task_id)
 
@@ -23,11 +23,13 @@ class YoutubeDownloadResource(Resource):
                         video_data = {
                             'title': video_info['title'],
                             'source': 'youtube',
-                            'video_path': video_info['filename'],
+                            'video_path': video_info['filename'],  # 保存本地文件名
                             'duration': video_info['duration'],
                             'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                         }
-                        video_service.save_to_history(video_data)
+                        # 获取当前登录用户的 ID
+                        user_id = current_user.id
+                        video_service.save_to_history(video_data, user_id)  # 传入 user_id
                 except Exception as e:
                     print(f"下载和保存历史记录失败: {str(e)}")
 

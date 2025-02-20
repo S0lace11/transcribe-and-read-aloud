@@ -39,6 +39,11 @@ class Config:
     # YouTube配置
     YOUTUBE_COOKIES_PATH = os.getenv('YOUTUBE_COOKIES_PATH')
     YOUTUBE_BROWSER = os.getenv('YOUTUBE_BROWSER', 'chrome')
+
+    # Supabase配置
+    SUPABASE_URL = os.getenv('SUPABASE_URL')
+    SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+
     
     @classmethod
     def init_folders(cls):

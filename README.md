@@ -69,43 +69,68 @@
 
 ### 后端
 - Flask (Python Web 框架)
-- Redis (数据存储与缓存)
+  - Flask-RESTful (用于构建 RESTful API)
+- Supabase (数据库服务)
   - 存储历史记录
-  - 缓存转录结果
-  - 支持多用户数据隔离
-- OSS (对象存储)
-- DashScope (语音转写)
+  - 视频元数据管理
+  - 转录结果存储
+- 阿里云 OSS (对象存储)
+  - 视频文件存储
+  - 支持视频流式播放
+- DashScope (语音转写服务)
+  - SenseVoice API 集成
+  - 支持多语言转写
+- yt-dlp (YouTube 视频下载)
+  - 支持高清视频下载
+  - 自动处理字幕
+- moviepy (视频处理)
+  - 视频信息提取
+  - 时长、分辨率计算
+
+### 前端
+- HTML5 
+  - 视频播放器
+  - 文件上传
+- CSS3 
+  - 响应式设计
+  - 动画效果
+- JavaScript 
+  - 视频文本同步
+  - 进度跟踪
+  - 历史记录管理
 
 ### 存储方案设计
 
-#### 1. Redis 键值设计
-- 转录结果缓存：`video:transcription:{filename}`
-- 用户历史记录：`user:{user_id}:history:page:{page}`
-- 最近处理记录：`user:{user_id}:recent:{limit}`
-
-#### 2. 数据结构
-- 历史记录存储格式：
+#### Supabase 数据结构
+- 视频历史记录表 (video_history):
   ```json
   {
+    "id": "UUID",
     "title": "视频标题",
     "source": "upload/youtube",
-    "video_path": "存储路径",
+    "video_path": "OSS存储路径",
     "duration": "视频时长",
-    "text_preview": "转写文本预览",
-    "created_at": "处理时间"
+    "file_size": "文件大小",
+    "fps": "帧率",
+    "resolution": "分辨率",
+    "created_at": "创建时间",
+    "transcribed": "转写状态",
+    "transcription": "纯文本转写结果",
+    "origin": "带时间戳的原始转写文本"
   }
   ```
 
-#### 3. 主要功能
-- 多用户数据隔离
-- 自动过期清理
-- 分页加载支持
-- 按时间排序
+#### OSS 存储结构
+- 视频文件存储
+- 支持流式访问
+- 自动生成唯一文件名
+- 支持临时访问URL
 
-### 前端
-- HTML5 (视频播放器)
-- CSS3 (样式和动画)
-- JavaScript (视频文本同步)
+### 主要功能
+- 多来源视频支持
+- 自动视频信息提取
+- 实时转写进度跟踪
+- 完整的历史记录管理
 
 project/
 ├── app.py # Flask 应用入口

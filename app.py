@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory, Response, redirect, send_file
+from flask import Flask, render_template
 from flask_restful import Api
 from services.video_service import VideoService
 from services.youtube_service import YouTubeService
@@ -30,11 +30,8 @@ api.add_resource(YoutubeDownloadResource, '/download')
 api.add_resource(ProgressResource, '/progress/<task_id>')
 api.add_resource(PlayerResource, '/player/<path:video_path>')
 
-    
 api.add_resource(VideoFileResource, '/video/<path:filename>')
-
 api.add_resource(TranscribeVideoResource, '/transcribe')
-    
 api.add_resource(HistoryResource, '/api/history') # 添加 HistoryResource 到 /api/history 路由
     
 api.add_resource(RecentHistoryResource, '/api/history/recent')

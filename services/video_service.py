@@ -12,12 +12,12 @@ from config import Config
 from http import HTTPStatus
 import json
 import uuid
-from redis import Redis
 import time
 from moviepy.editor import VideoFileClip
 import requests
 from datetime import datetime
 import re
+from supabase import create_client, Client
 
 class VideoService:
     """视频服务类
@@ -33,7 +33,7 @@ class VideoService:
         """
         self._init_oss()
         self._init_dashscope()
-        self._init_redis()
+        self._init_supabase()
         # 初始化文件夹
         Config.init_folders()
         
@@ -66,34 +66,21 @@ class VideoService:
             print(f"DashScope 初始化失败: {str(e)}")
             raise
     
-    def _init_redis(self):
-        """初始化Redis连接"""
+    def _init_supabase(self):
+        """初始化 Supabase 客户端"""
         try:
-            self.redis = Redis(
-                host=Config.REDIS_HOST,
-                port=Config.REDIS_PORT,
-                db=Config.REDIS_DB,
-                password=Config.REDIS_PASSWORD,
-                decode_responses=True,
-                socket_timeout=10,
-                retry_on_timeout=True
-            )
-            # 测试连接
-            self.redis.ping()
-            print("Redis连接成功")
+            # 从配置中获取 Supabase URL 和 API 密钥
+            supabase_url: str = Config.SUPABASE_URL
+            supabase_key: str = Config.SUPABASE_KEY
+
+            # 创建 Supabase 客户端实例
+            self.supabase: Client = create_client(supabase_url, supabase_key)
+            print("Supabase 初始化成功")
+
         except Exception as e:
-            print(f"Redis连接失败: {str(e)}")
+            print(f"Supabase 初始化失败: {str(e)}")
             raise
-            
-    # 新增私有方法：构建带前缀的历史记录 key
-    def _build_history_key(self, raw_id):
-        """构建带前缀的历史记录key"""
-        return f"video:{raw_id}"
-    
-    # 新增私有方法：获取带前缀的最近历史记录sorted set key
-    def _get_recent_history_key(self):
-        """获取带前缀的最近历史记录sorted set key"""
-        return "video:recent_history"
+
             
     def check_video(self, video_path):
         """检查视频文件是否有效且可以处理
@@ -240,77 +227,91 @@ class VideoService:
             return "00:00"
 
     def process_video(self, filename, source_type='upload'):
-        """处理视频文件
-        
-        Args:
-            filename: 视频文件名
-            source_type: 'upload' 或 'youtube' 表示视频来源
-            
-        Returns:
-            dict: 处理结果，包含转写结果，失败返回None
-        """
+        """处理视频文件，上传到OSS，转录，并将结果保存到 Supabase"""
         try:
-            # 获取正确的文件路径
             video_path = os.path.join(Config.RECORDS_FOLDER, filename)
-            
-            # 检查视频文件
             is_valid, error_msg = self.check_video(video_path)
             if not is_valid:
                 print(error_msg)
                 return None
-            
-            # 上传到OSS
+
             video_url = self.upload_to_oss(video_path)
             if not video_url:
                 return None
-                
-            # 转写视频
+
             transcription = self.transcribe_video(video_url)
             if not transcription:
                 return None
-                
-            # 更新历史记录中的转录状态和结果
-            history_id = None
-            # 查找对应的历史记录，使用带前缀的recent_history key
-            history_ids = self.redis.zrange(self._get_recent_history_key(), 0, -1)
-            for hid in history_ids:
-                data = self.redis.hgetall(hid)
-                if data.get('video_path') == filename:
-                    history_id = hid
-                    break
-                    
-            if history_id:
-                # 格式化转录文本
-                plain_text = []
-                formatted_text = []
-                for sentence in transcription.get('sentences', []):
-                    start_time = self.format_time(sentence.get('begin_time', 0))
-                    end_time = self.format_time(sentence.get('end_time', 0))
-                    text = re.sub(r'<\|[^>]+\|>', '', sentence.get('text', '')).strip()
-                    
-                    # 保存纯文本和带时间戳的格式化文本
-                    plain_text.append(text)
-                    formatted_text.append(f"[{start_time} - {end_time}] {text}")
-            
-                # 生成最终文本
-                plain_text = '\n\n'.join(plain_text)  # 纯文本，没有标签和时间戳
-                transcription_text = '\n\n'.join(formatted_text)  # 带时间戳的文本
-                
-                print("保存到Redis的纯文本:", plain_text)  # 调试日志
-                print("保存到Redis的原始文本:", transcription_text)  # 调试日志
-                
-                # 更新历史记录
-                self.redis.hmset(history_id, {
-                    'transcribed': '1',
-                    'transcription': plain_text,
-                    'origin': transcription_text
-                })
-                
 
-            return {
-                'transcription': transcription
+            # 获取视频信息（用于保存到 Supabase）
+            video_info = self.get_video_info(video_path)
+            if not video_info:
+                video_info = {'duration': '0:00', 'size': 0, 'fps': 0, 'resolution': ''}
+
+
+            # 格式化转录文本 (与之前一样，但现在将文本保存到 Supabase)
+            plain_text = []
+            formatted_text = []
+            for sentence in transcription.get('sentences', []):
+                start_time = self.format_time(sentence.get('begin_time', 0))
+                end_time = self.format_time(sentence.get('end_time', 0))
+                text = re.sub(r'<\|[^>]+\|>', '', sentence.get('text', '')).strip()
+
+                plain_text.append(text)
+                formatted_text.append(f"[{start_time} - {end_time}] {text}")
+
+            plain_text = '\n\n'.join(plain_text) #纯文本
+            transcription_text = '\n\n'.join(formatted_text) #带时间戳的文本
+
+            # 准备要插入到 Supabase 的数据, 添加缺少的字段
+            supabase_data = {
+              'title': filename,
+              'source': source_type,
+              'video_path': video_url,  # 存储 OSS URL
+              'duration': str(video_info['duration']), #转为字符串
+              'file_size': video_info['size'],  # 新增：文件大小
+              'fps': video_info['fps'],  # 新增：帧率
+              'resolution': video_info['resolution'],  # 新增：分辨率
+              'created_at': datetime.utcnow().isoformat() + 'Z',  # UTC 时间, ISO 8601 格式
+              'transcribed': "1", #直接改为字符串
+              'transcription': plain_text,  # 纯文本
+              'origin': transcription_text # 原始转录文本（带时间戳）
             }
+
+
+            # 使用 Supabase 客户端插入数据 或 更新数据
+            # 假设你的 Supabase 表名为 'video_records'
+            # 先尝试根据 title 和 source 查找是否已有记录
+            existing_record = self.supabase.table('video_history') \
+                .select('id') \
+                .eq('title', filename) \
+                .eq('source', source_type) \
+                .single() \
+                .execute()
             
+            if existing_record.data: #如果存在
+               # 更新现有记录
+               result = self.supabase.table('video_history') \
+                   .update(supabase_data) \
+                   .eq('id', existing_record.data['id']) \
+                   .execute()
+               print("Supabase 更新结果:", result)
+               history_id = existing_record.data['id']
+            else:
+                #创建新纪录
+                result = self.supabase.table('video_history').insert(supabase_data).execute()
+                print("Supabase 插入结果:", result)
+                history_id = result.data[0]['id'] if result.data else None
+
+
+            #检查是否成功插入数据
+            if result.data:
+              return {
+                'transcription': transcription,
+                'video_url': video_url,
+                'history_id': str(history_id)
+              }
+
         except Exception as e:
             print(f"视频处理失败: {str(e)}")
             return None
@@ -339,107 +340,137 @@ class VideoService:
 
 
     def save_to_history(self, video_data):
-        """保存视频到历史记录"""
+        """保存视频信息到 Supabase (仅保存本地文件信息，不上传 OSS)"""
         try:
-            # 生成原始历史记录ID
-            raw_history_id = f"{int(time.time())}"
-            # 构建带前缀的历史记录 key
-            history_id = self._build_history_key(raw_history_id)
-            
-            # 准备历史记录数据
-            history_data = {
-                "id": history_id,
-                "title": video_data.get('title', '未命名视频'),
-                "source": video_data.get('source', 'upload'),
-                "video_path": video_data.get('video_path', ''),
-                "duration": video_data.get('duration', '0:00'),
-                "created_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                "transcribed": "0",
-                "transcription_key": f"transcription:{history_id}",
-                "transcription": "",
-                "origin": ""
+            # 准备要插入到 Supabase 的数据
+            supabase_data = {
+                'title': video_data.get('title', '未命名视频'),
+                'source': video_data.get('source', 'upload'),
+                'video_path': video_data.get('video_path', ''),  # 保存本地文件路径
+                'duration': video_data.get('duration', '0:00'),
+                'created_at': datetime.now().isoformat() + 'Z',
+                'transcribed': False,  # 初始状态为未转录
+                'transcription': '',
+                'origin': ''
             }
-            
 
-            # 将所有值转换为字符串
-            history_data = {k: str(v) for k, v in history_data.items()}
-            
-            # 保存到Redis，key 使用带前缀的 history_id
-            self.redis.hmset(history_id, history_data)
-            # 添加到最近记录列表，使用带前缀的sorted set key
-            self.redis.zadd(self._get_recent_history_key(), {history_id: time.time()})
-            
-            return history_id
+            # 使用 Supabase 客户端插入数据
+            result = self.supabase.table('video_history').insert(supabase_data).execute()
+            print("Supabase 插入结果:", result)
+
+            # 检查是否成功插入数据
+            if result.data:
+                record_id = result.data[0]['id']
+                return str(record_id)  # 返回 Supabase 记录的 ID
+            else:
+                print("Supabase 插入失败:", result)
+                return None
+
         except Exception as e:
-            print(f"保存历史记录失败: {str(e)}")
+            print(f"保存历史记录到 Supabase 失败: {str(e)}")
             return None
 
     def get_recent_history(self, limit=10):
-        """获取最近的历史记录"""
-        try:
-            # 获取最近的历史记录ID，使用带前缀的sorted set key
-            history_ids = self.redis.zrevrange(self._get_recent_history_key(), 0, limit-1)
-            
-            # 获取详细信息
-            history_list = []
-            for history_id in history_ids:
-                data = self.redis.hgetall(history_id)
-                if data:
-                    history_list.append(data)
-                    
-            return history_list
-        except Exception as e:
-            print(f"获取历史记录失败: {str(e)}")
+      """从 Supabase 获取最近的历史记录"""
+      try:
+        # 从 Supabase 查询最近的记录，按 created_at 字段降序排列
+        result = self.supabase.table('video_history') \
+            .select('*') \
+            .order('created_at', desc=True) \
+            .limit(limit) \
+            .execute()
+        if result.data:
+            return result.data  # 返回 Supabase 查询结果
+        else:
+            print("获取最近历史记录失败:", result)
             return []
 
+      except Exception as e:
+        print(f"从 Supabase 获取历史记录失败: {str(e)}")
+        return []
+
     def delete_history(self, history_id):
-        """删除历史记录及相关数据"""
-        try:
-            # 获取历史记录
-            history_data = self.redis.hgetall(history_id)
-            if not history_data:
-                return False, "历史记录不存在"
-                
-            # 删除视频文件
-            video_path = os.path.join(Config.RECORDS_FOLDER, history_data.get('video_path', ''))
-            if os.path.exists(video_path):
-                try:
-                    os.remove(video_path)
-                    print(f"已删除视频文件: {video_path}")
-                except Exception as e:
-                    print(f"删除视频文件失败: {str(e)}")
-                    
-            # 删除转录结果
-            transcription_key = history_data.get('transcription_key')
-            if transcription_key:
-                self.redis.delete(transcription_key)
-                
-            # 删除历史记录
-            self.redis.delete(history_id)
-            self.redis.zrem(self._get_recent_history_key(), history_id)
-            
+      """从 Supabase 删除历史记录及相关数据"""
+      try:
+            # 1. 从 Supabase 删除记录
+            # 这里 history_id 是 Supabase 表中的主键 (文本类型)
+            delete_result = self.supabase.table('video_history').delete().eq('id', history_id).execute()
+
+            if not delete_result.data:
+                print("Supabase 删除失败:", delete_result)
+                return False, "删除失败，记录可能不存在或已被删除"
+
+            print("supabase数据已删除")
             return True, "删除成功"
+
+      except Exception as e:
+            print(f"从 Supabase 删除历史记录失败: {str(e)}")
+            return False, str(e)
+      
+    def get_history_detail(self, history_id):
+      """根据 Supabase 中的 ID 获取视频记录详情"""
+      try:
+          # 从 Supabase 查询单个记录
+          result = self.supabase.table('video_history') \
+              .select('*') \
+              .eq('id', history_id) \
+              .single() \
+              .execute()
+
+          if result.data:
+              return result.data  # 返回 Supabase 查询结果
+          else:
+              print("历史记录未找到:", result)  # Supabase 错误信息更详细
+              return None
+
+      except Exception as e:
+          print(f"从 Supabase 获取历史记录详情失败: {str(e)}")
+          return None
+
+    def delete_history(self, history_id):
+        """从 Supabase 删除历史记录及相关数据，并删除 OSS 上的视频文件"""
+        try:
+            # 1. 查询 Supabase 记录，获取 video_path (OSS 上的文件名)
+            select_result = self.supabase.table('video_history') \
+                .select('video_path') \
+                .eq('id', history_id) \
+                .single() \
+                .execute()
+
+            if not select_result.data:
+                print("Supabase 记录未找到:", select_result)
+                return False, "删除失败，记录可能不存在或已被删除"
+
+            video_path_oss = select_result.data['video_path']  # 获取 OSS 上的完整 URL
+
+            # 2. 从 Supabase 删除记录
+            delete_result = self.supabase.table('video_history').delete().eq('id', history_id).execute()
+
+            if not delete_result.data:
+                print("Supabase 删除失败:", delete_result)
+                return False, "删除失败，记录可能不存在或已被删除"
+
+            # 3. 从 OSS 删除视频文件
+            if video_path_oss:
+                try:
+                    # 从 video_path_oss 中提取文件名
+                    #  假设 video_path_oss 的格式是： https://your-bucket.oss-cn-region.aliyuncs.com/your-file-name.mp4
+                    filename_oss = video_path_oss.split('/')[-1]  # 获取 URL 中的文件名部分
+                    self.bucket.delete_object(filename_oss)  # 使用 OSS 文件名删除
+                    print(f"已从 OSS 删除视频文件: {filename_oss}")
+                except Exception as e:
+                    print(f"从 OSS 删除视频文件失败: {str(e)}")
+                    #  这里可以选择是否继续删除 Supabase 记录。
+                    #  如果 OSS 文件删除失败，但 Supabase 记录已删除，可能会导致数据不一致。
+                    #  一种处理方式是：如果 OSS 删除失败，就回滚 Supabase 的删除操作 (但这需要事务支持，Supabase 免费版不支持事务)
+                    #  另一种处理方式是：即使 OSS 删除失败，也继续删除 Supabase 记录，并在日志中记录 OSS 删除失败的情况，稍后手动处理。
+                    #  这里选择继续删除 Supabase 记录。
+                    return False, f"从 OSS 删除视频文件失败: {str(e)}，但 Supabase 记录已删除"
+
+            print("Supabase 数据已删除")
+            return True, "删除成功"
+
         except Exception as e:
-            print(f"删除历史记录失败: {str(e)}")
+            print(f"从 Supabase 删除历史记录失败: {str(e)}")
             return False, str(e)
 
-
-
-# 测试代码
-if __name__ == "__main__":  
-    # 创建服务实例
-    video_service = VideoService()
-    
-    # 测试视频处理
-    video_path = ""  # 替换为实际的视频路径
-    
-    if os.path.exists(video_path):
-        result = video_service.process_video(video_path)
-        if result:
-            print("视频处理完成！")
-            print("处理结果：")
-            print(json.dumps(result, indent=4, ensure_ascii=False))
-        else:
-            print("视频处理失败！")
-    else:
-        print(f"错误: 视频文件不存在: {video_path}") 
