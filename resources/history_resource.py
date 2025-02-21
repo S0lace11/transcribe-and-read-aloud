@@ -6,53 +6,82 @@ class HistoryResource(Resource):
         try:
             page = request.args.get('page', 1, type=int)
             per_page = request.args.get('per_page', 10, type=int)
+            from app import video_service  # 延迟导入
 
-            # 获取历史记录列表 (假设 video_service 已经在 app.py 中初始化)
-            # 需要在 app.py 中导入 video_service
-            from app import video_service  # 避免循环导入 (如果 resources 文件夹独立)
-
-            # 获取ID列表
+            # 从 Supabase 查询历史记录
             start = (page - 1) * per_page
             end = start + per_page - 1
-            video_ids = video_service.redis.zrevrange("history:list", start, end)
 
-            # 获取详细信息
-            history_list = []
-            for video_id in video_ids:
-                details = video_service.redis.hgetall(f"history:detail:{video_id}")
-                if details:
-                    details['id'] = video_id
-                    history_list.append(details)
+            # 假设你的 Supabase 表名为 'video_history'
+            result = video_service.supabase.table('video_history') \
+                .select('*') \
+                .order('created_at', desc=True) \
+                .range(start, end) \
+                .execute()
 
-            return jsonify({
-                'items': history_list,
-                'page': page,
-                'per_page': per_page
-            })
+            if result.data:
+                return jsonify({
+                    'items': result.data,  # 直接返回 Supabase 查询结果
+                    'page': page,
+                    'per_page': per_page
+                })
+            else:
+                print("获取历史记录失败:", result)
+                return jsonify({'error': '获取历史记录失败'}), 500
 
         except Exception as e:
+            print(f"从 Supabase 获取历史记录失败: {str(e)}")
             return jsonify({'error': str(e)}), 500
+        
+
 class RecentHistoryResource(Resource):
     def get(self):
         try:
             # 需要在 app.py 中导入 video_service
             from app import video_service
 
-            # 获取最近的历史记录
+            # 从 Supabase 查询最近历史记录
             history_list = video_service.get_recent_history(limit=10)
-
             return jsonify({
-                'success': True,
-                'history': history_list
-            })
+                    'success': True,
+                    'history': history_list
+                })
 
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
 
 class HistoryDetailResource(Resource):
+    def get(self, history_id):
+        """根据 Supabase 中的 ID 获取视频记录详情"""
+        try:
+            from app import video_service  # 延迟导入
+
+            # 从 Supabase 查询单个记录
+            # 假设你的 Supabase 表名为 'video_history'，主键字段名为 'id'
+            result = video_service.supabase.table('video_history') \
+                .select('*') \
+                .eq('id', int(history_id)) \
+                .single() \
+                .execute()
+
+            if result.data:
+                return jsonify({
+                    'success': True,
+                    'history_item': result.data
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': '历史记录未找到'
+                }), 404
+
+        except Exception as e:
+            print(f"从 Supabase 获取历史记录详情失败: {str(e)}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+
     def delete(self, history_id):
         try:
-            # 需要在 app.py 中导入 video_service
             from app import video_service
 
             success, message = video_service.delete_history(history_id)
