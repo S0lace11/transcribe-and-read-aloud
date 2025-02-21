@@ -100,18 +100,27 @@ class VideoService:
             # 生成唯一文件名
             file_extension = os.path.splitext(video_path)[1]
             unique_filename = f"{uuid.uuid4()}{file_extension}"
-
+            
             print(f"开始上传视频到OSS: {os.path.basename(video_path)}")
-
+            
+            # 设置文件元数据，包含原始文件名
+            headers = {
+                'x-oss-meta-original-name': os.path.basename(video_path)
+            }
+            
             # 上传文件
-            self.bucket.put_object_from_file(unique_filename, video_path)
-
+            self.bucket.put_object_from_file(
+                unique_filename, 
+                video_path,
+                headers=headers
+            )
+            
             # 生成文件访问URL（24小时有效）
-            url = self.bucket.sign_url('GET', unique_filename, 24 * 3600)
-
+            url = self.bucket.sign_url('GET', unique_filename, 24*3600)
+            
             print(f"视频上传到OSS成功: {url}")
             return url
-
+            
         except Exception as e:
             print(f"视频上传到OSS失败: {str(e)}")
             return None
@@ -243,7 +252,8 @@ class VideoService:
                 'resolution': video_info['resolution'],
                 'transcribed': "1",
                 'transcription': plain_text,
-                'origin': transcription_text
+                'origin': transcription_text,
+                'video_url': video_url  # 添加 OSS URL
             }
 
             if existing_record.data:
@@ -341,19 +351,59 @@ class VideoService:
     def delete_history(self, history_id):
       """从 Supabase 删除历史记录及相关数据"""
       try:
-            # 1. 从 Supabase 删除记录
-            # 这里 history_id 是 Supabase 表中的主键 (文本类型)
-            delete_result = self.supabase.table('video_history').delete().eq('id', history_id).execute()
+            # 1. 从 Supabase 获取记录信息
+            result = self.supabase.table('video_history') \
+                .select('*') \
+                .eq('id', history_id) \
+                .single() \
+                .execute()
+
+            if not result.data:
+                return False, "记录不存在"
+
+            history_data = result.data
+            
+            # 2. 删除本地文件
+            video_path = os.path.join(Config.RECORDS_FOLDER, history_data.get('video_path', ''))
+            if os.path.exists(video_path):
+                try:
+                    os.remove(video_path)
+                    print(f"已删除本地文件: {video_path}")
+                except Exception as e:
+                    print(f"删除本地文件失败: {str(e)}")
+
+            # 3. 删除OSS文件
+            if history_data.get('video_url'):
+                try:
+                    # 从 URL 中提取 OSS 对象名
+                    oss_url = history_data['video_url']
+                    # OSS URL 格式: https://bucket.endpoint/object_key?params
+                    object_key = oss_url.split('?')[0].split('/')[-1]
+                    
+                    if object_key:
+                        try:
+                            self.bucket.delete_object(object_key)
+                            print(f"已删除OSS文件: {object_key}")
+                        except Exception as e:
+                            print(f"删除OSS文件失败: {str(e)}")
+                except Exception as e:
+                    print(f"处理OSS文件删除失败: {str(e)}")
+
+            # 4. 从 Supabase 删除记录
+            delete_result = self.supabase.table('video_history') \
+                .delete() \
+                .eq('id', history_id) \
+                .execute()
 
             if not delete_result.data:
                 print("Supabase 删除失败:", delete_result)
                 return False, "删除失败，记录可能不存在或已被删除"
 
-            print("supabase数据已删除")
+            print("所有相关数据已删除")
             return True, "删除成功"
 
       except Exception as e:
-            print(f"从 Supabase 删除历史记录失败: {str(e)}")
+            print(f"删除历史记录失败: {str(e)}")
             return False, str(e)
     
     def get_history_detail(self, history_id):
