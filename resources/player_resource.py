@@ -12,6 +12,9 @@ class PlayerResource(Resource):
 
             # 需要在 app.py 中导入 video_service
             from app import video_service
+
+
+            # 检查文件是否存在 (这部分逻辑保留，因为仍然需要检查本地文件)
             video_file_path = os.path.join(Config.RECORDS_FOLDER, video_path)
             if not os.path.exists(video_file_path):
                 return "视频文件不存在", 404

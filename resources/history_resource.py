@@ -37,8 +37,10 @@ class HistoryResource(Resource):
 class RecentHistoryResource(Resource):
     def get(self):
         try:
+            # 需要在 app.py 中导入 video_service
             from app import video_service
 
+            # 从 Supabase 查询最近历史记录
             history_list = video_service.get_recent_history(limit=10)
             return jsonify({
                     'success': True,
@@ -50,13 +52,22 @@ class RecentHistoryResource(Resource):
 
 class HistoryDetailResource(Resource):
     def get(self, history_id):
+        """根据 Supabase 中的 ID 获取视频记录详情"""
         try:
-            from app import video_service
-            video_data = video_service.get_history_detail(history_id)
-            if video_data:
+            from app import video_service  # 延迟导入
+
+            # 从 Supabase 查询单个记录
+            # 假设你的 Supabase 表名为 'video_history'，主键字段名为 'id'
+            result = video_service.supabase.table('video_history') \
+                .select('*') \
+                .eq('id', int(history_id)) \
+                .single() \
+                .execute()
+
+            if result.data:
                 return jsonify({
                     'success': True,
-                    'history_item': video_data
+                    'history_item': result.data
                 })
             else:
                 return jsonify({
@@ -68,11 +79,12 @@ class HistoryDetailResource(Resource):
             print(f"从 Supabase 获取历史记录详情失败: {str(e)}")
             return jsonify({'success': False, 'error': str(e)}), 500
 
+
     def delete(self, history_id):
         try:
             from app import video_service
-            #保证history_id是字符串
-            success, message = video_service.delete_history(str(history_id))
+
+            success, message = video_service.delete_history(history_id)
             if success:
                 return jsonify({
                     'success': True,
@@ -85,5 +97,4 @@ class HistoryDetailResource(Resource):
                 }), 400
 
         except Exception as e:
-            print(f"从 Supabase 删除历史记录失败: {str(e)}")
             return jsonify({'success': False, 'error': str(e)}), 500
