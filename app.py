@@ -38,6 +38,6 @@ api.add_resource(RecentHistoryResource, '/api/history/recent')
 api.add_resource(HistoryDetailResource, '/api/history/<history_id>')
 
 if __name__ == '__main__':
-    # 确保必要的目录存在
+        # 确保必要的目录存在
     Config.init_folders()
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)  # 监听所有接口，关闭调试模式
