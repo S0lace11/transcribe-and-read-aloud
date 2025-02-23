@@ -177,11 +177,18 @@ class VideoService:
             print(f"转写过程发生错误：{str(e)}")
             return None
 
-    def format_time(self, seconds):
-        """将秒数转换为时分秒格式"""
+    def format_time(self, milliseconds):
+        """将毫秒数转换为时分秒格式
+        
+        Args:
+            milliseconds: 毫秒数
+            
+        Returns:
+            str: 格式化的时间字符串 (MM:SS 或 HH:MM:SS)
+        """
         try:
-            # 确保输入是数字
-            seconds = float(seconds)
+            # 确保输入是数字并转换为秒
+            seconds = float(milliseconds) / 1000  # 毫秒转换为秒
 
             # 计算小时、分钟和秒
             hours = int(seconds // 3600)
@@ -198,6 +205,7 @@ class VideoService:
         except (ValueError, TypeError) as e:
             print(f"时间格式化失败: {str(e)}")
             return "00:00"
+
     def process_video(self, filename, source_type='upload'):
         """处理视频文件，上传到OSS，转录，并将结果保存到 Supabase"""
         try:

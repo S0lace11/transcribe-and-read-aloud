@@ -60,7 +60,7 @@ class HistoryDetailResource(Resource):
             # 假设你的 Supabase 表名为 'video_history'，主键字段名为 'id'
             result = video_service.supabase.table('video_history') \
                 .select('*') \
-                .eq('id', int(history_id)) \
+                .eq('id', history_id) \
                 .single() \
                 .execute()
 

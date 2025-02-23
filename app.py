@@ -3,6 +3,8 @@ from flask_restful import Api
 from services.video_service import VideoService
 from services.youtube_service import YouTubeService
 from config import Config
+from flask_cors import CORS
+
 import os
 from resources.history_resource import HistoryResource, RecentHistoryResource, HistoryDetailResource
 from resources.transcription_resource import TranscribeVideoResource
@@ -17,6 +19,7 @@ app = Flask(__name__)
 video_service = VideoService()
 youtube_service = YouTubeService()
 api = Api(app)
+CORS(app, resources={r"/player/*": {"origins": "*"}})  # 允许所有来源访问 /player/*
 
 
 
