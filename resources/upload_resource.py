@@ -18,8 +18,10 @@ class UploadVideoResource(Resource):
             if not file.filename.lower().endswith('.mp4'):
                 return jsonify({'error': '只支持MP4格式的视频'}), 415
 
-            # 保存文件
+            # 使用 secure_filename 确保文件名安全
             filename = secure_filename(file.filename)
+
+            # 保存文件
             file_path = os.path.join(Config.RECORDS_FOLDER, filename)
             file.save(file_path)
 
@@ -32,7 +34,7 @@ class UploadVideoResource(Resource):
                 'title': filename,
                 'source': 'upload',
                 'video_path': filename,
-                'duration': str(video_info['duration']) if video_info else '0:00',
+                'duration': str(video_info['duration']) if video_info and 'duration' in video_info else '0:00',
                 'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
 
@@ -46,7 +48,7 @@ class UploadVideoResource(Resource):
                 'data': {
                     'filename': filename,
                     'history_id': str(history_id) if history_id else None,
-                    'duration': str(video_info['duration']) if video_info else '0:00'
+                    'duration': str(video_info['duration']) if video_info and 'duration' in video_info else '0:00'
                 }
             }, 201
 
