@@ -8,12 +8,13 @@ from config import Config
 import queue
 import time
 
-class VideoService:
+class VideoDownLoadService:
     """视频下载服务类"""
 
     def __init__(self):
         """初始化视频下载服务"""
         self.progress_queues = {}
+        self._task_id_to_title = {}
 
     def _extract_url(self, text):
         """从文本中提取 URL"""
@@ -159,7 +160,7 @@ class VideoService:
             del self.progress_queues[task_id]
 
 if __name__ == "__main__":
-    video_service = VideoService()
+    video_download_service = VideoDownLoadService()
 
     print("视频下载器 (输入 'q' 退出)")
     print("提示：")
@@ -173,9 +174,9 @@ if __name__ == "__main__":
             break
 
         task_id = str(int(time.time()))
-        result = video_service.download_video(user_input, task_id)
+        result = video_download_service.download_video(user_input, task_id)
 
-        progress_queue = video_service.get_progress_queue(task_id)
+        progress_queue = video_download_service.get_progress_queue(task_id)
         if progress_queue:
             while True:
                 progress = progress_queue.get()

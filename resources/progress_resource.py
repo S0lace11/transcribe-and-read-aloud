@@ -5,8 +5,8 @@ import json
 class ProgressResource(Resource):
     def get(self, task_id):
         def generate():
-            from app import youtube_service  # 延迟导入
-            progress_queue = youtube_service.get_progress_queue(task_id)
+            from app import video_download_service  # 延迟导入
+            progress_queue = video_download_service.get_progress_queue(task_id)
             if not progress_queue:
                 yield f"data: {json.dumps({'error': '任务不存在'})}\n\n"
                 return
@@ -18,6 +18,6 @@ class ProgressResource(Resource):
                         break
                     yield f"data: {json.dumps(progress)}\n\n"
             finally:
-                youtube_service.remove_progress_queue(task_id)
+                video_download_service.remove_progress_queue(task_id)
 
         return Response(generate(), mimetype='text/event-stream')

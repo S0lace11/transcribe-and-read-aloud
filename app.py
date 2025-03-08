@@ -1,7 +1,7 @@
 from flask import Flask, render_template
 from flask_restful import Api
 from services.video_service import VideoService
-from services.youtube_service import YouTubeService
+from services.youtube_service import VideoDownLoadService
 from config import Config
 from flask_cors import CORS
 
@@ -17,7 +17,7 @@ from resources.player_resource import PlayerResource
 
 app = Flask(__name__)
 video_service = VideoService()
-youtube_service = YouTubeService()
+video_download_service = VideoDownLoadService()
 api = Api(app)
 CORS(app, resources={r"/player/*": {"origins": "*"}})  # 允许所有来源访问 /player/*
 
