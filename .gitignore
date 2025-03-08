@@ -23,3 +23,6 @@ cookies.txt
 # 添加这些行
 records/*
 !records/.gitkeep
+
+# cookies
+cookies/*

@@ -38,6 +38,7 @@ class Config:
     
     # YouTube配置
     YOUTUBE_COOKIES_PATH = os.getenv('YOUTUBE_COOKIES_PATH')
+    BILIBILI_COOKIES_PATH = os.getenv('BILIBILI_COOKIES_PATH')
     YOUTUBE_BROWSER = os.getenv('YOUTUBE_BROWSER', 'chrome')
 
     #Supabase

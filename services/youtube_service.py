@@ -1,95 +1,71 @@
-"""
-YouTube视频下载服务模块
-处理YouTube视频的下载和进度跟踪
-"""
-
 import sys
 import os
-import re  # 添加 re 模块导入
-from datetime import datetime  # 添加 datetime 导入
+import re
+from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import yt_dlp
 from config import Config
 import queue
 import time
 
-class YouTubeService:
-    """YouTube视频下载服务类
-    提供YouTube视频下载和进度跟踪功能
-    """
-    
+class VideoService:
+    """视频下载服务类"""
+
     def __init__(self):
-        """
-        初始化YouTube下载服务
-        创建进度队列字典，用于存储不同下载任务的进度信息
-        """
+        """初始化视频下载服务"""
         self.progress_queues = {}
-        
-    def _format_size(self, bytes):
-        """格式化文件大小
-        
-        Args:
-            bytes: 字节数
-            
-        Returns:
-            str: 格式化后的大小字符串（如：1.5MB）
-        """
+
+    def _extract_url(self, text):
+        """从文本中提取 URL"""
+        match = re.search(r'(https?://[^\s]+)', text)
+        if match:
+            url = match.group(1)
+            return url.rstrip('/?.#')
+        return None
+
+    def _format_size(self, bytes_size):
+        """格式化文件大小"""
+        if bytes_size is None:
+            return "未知"
         for unit in ['B', 'KB', 'MB', 'GB']:
-            if bytes < 1024:
-                return f"{bytes:.1f}{unit}"
-            bytes /= 1024
-        return f"{bytes:.1f}GB"
-        
+            if bytes_size < 1024.0:
+                return f"{bytes_size:.1f}{unit}"
+            bytes_size /= 1024.0
+        return f"{bytes_size:.1f}TB"
+
     def _sanitize_filename(self, title):
-        """处理文件名，使其安全且易读
-        
-        Args:
-            title: 原始标题
-            
-        Returns:
-            str: 处理后的文件名
-        """
-        # 截取前30个字符
+        """处理文件名"""
         title = title[:30].strip()
-        
-        # 移除特殊字符，只保留字母、数字、空格和中文字符
-        title = re.sub(r'[^\w\s\u4e00-\u9fff-]', '', title)
-        
-        # 将空格替换为下划线
-        title = title.replace(' ', '_')
-        
-        # 添加时间戳
+        title = re.sub(r'[\\/*?:"<>|]', "", title)
+        title = re.sub(r'[\n\r\t]', ' ', title)
+        title = re.sub(r'\s+', ' ', title)
+        title = title.replace(" ", "_")
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        
         return f"{title}_{timestamp}.mp4"
-        
+
     def _create_progress_hook(self, task_id):
-        """创建下载进度回调函数
-        
-        Args:
-            task_id: 下载任务ID
-            
-        Returns:
-            function: 进度回调函数
-        """
+        """创建下载进度回调函数"""
         progress_queue = self.progress_queues.get(task_id)
         if not progress_queue:
             return None
-            
+
         def progress_hook(d):
-            """下载进度回调
-            处理下载状态更新，包括下载进度、速度等信息
-            """
+            """下载进度回调"""
             if d['status'] == 'downloading':
+                percent = d.get('percent')
+                if percent is None:
+                    percent = 0
+
                 progress = {
                     'status': 'downloading',
                     'downloaded': self._format_size(d.get('downloaded_bytes', 0)),
-                    'total': self._format_size(d.get('total_bytes', 0)),
+                    'total': self._format_size(d.get('total_bytes') or d.get('total_bytes_estimate')),
                     'speed': self._format_size(d.get('speed', 0)) + '/s',
                     'eta': str(d.get('eta', '未知')),
-                    'progress': d.get('downloaded_bytes', 0) / d.get('total_bytes', 1) * 100 if d.get('total_bytes') else 0
+                    'progress': percent
                 }
                 progress_queue.put(progress)
+
             elif d['status'] == 'finished':
                 video_path = d.get('filename', '').replace('\\', '/')
                 filename = os.path.basename(video_path)
@@ -97,57 +73,70 @@ class YouTubeService:
                     'status': 'completed',
                     'video_path': filename
                 })
-                
+
         return progress_hook
-        
-    def download_video(self, url, task_id):
-        """下载YouTube视频
-        
-        Args:
-            url: YouTube视频URL
-            task_id: 下载任务ID
-            
-        Note:
-            下载进度通过progress_queue通知调用者
-        """
+
+    def download_video(self, user_input, task_id):
+        """下载视频"""
         try:
-            # 创建进度队列
+            url = self._extract_url(user_input)
+            if not url:
+                raise ValueError("未找到有效的 URL")
+
             self.progress_queues[task_id] = queue.Queue()
-            
-            # 基础下载选项
+
             ydl_opts = {
-                'format': 'mp4',
+                'format': 'bestvideo+bestaudio/best',
+                'merge_output_format': 'mp4',
                 'progress_hooks': [self._create_progress_hook(task_id)],
+                'retries': 10,
+                'fragment_retries': 10,
+                'retry-sleep': '5-10',
             }
             
-            # 添加cookies配置
-            if Config.YOUTUBE_COOKIES_PATH:
-                ydl_opts['cookiefile'] = Config.YOUTUBE_COOKIES_PATH
-            elif Config.YOUTUBE_BROWSER:
-                ydl_opts['cookiesfrombrowser'] = (Config.YOUTUBE_BROWSER,)
-            
-            # 先获取视频信息
+
+            if "youtube.com" in url or "youtu.be" in url:
+                if Config.YOUTUBE_COOKIES_PATH:
+                    ydl_opts['cookiefile'] = Config.YOUTUBE_COOKIES_PATH
+                elif Config.YOUTUBE_BROWSER:
+                    ydl_opts['cookiesfrombrowser'] = (Config.YOUTUBE_BROWSER,)
+
+            elif "bilibili.com" in url:
+                if Config.BILIBILI_COOKIES_PATH:
+                    ydl_opts['cookiefile'] = Config.BILIBILI_COOKIES_PATH
+
+            else:
+                raise ValueError("不支持的视频 URL")
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 video_info = ydl.extract_info(url, download=False)
                 if not video_info:
                     raise Exception("无法获取视频信息")
-                
-                # 生成安全的文件名
+
                 safe_filename = self._sanitize_filename(video_info.get('title', 'video'))
-                
-                # 更新下载选项，设置输出路径
-                ydl_opts['outtmpl'] = os.path.join(Config.RECORDS_FOLDER, safe_filename)
-                
-                # 使用更新后的选项下载视频
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl_download:
-                    ydl_download.download([url])
-                
+                filepath = os.path.join(Config.RECORDS_FOLDER, safe_filename)
+                ydl_opts['outtmpl'] = filepath
+
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl_download:
+                        ydl_download.download([url])
+                except Exception as e:
+                    print(f"下载过程中发生错误: {str(e)}")
+                    # 删除部分下载的文件
+                    if os.path.exists(filepath):
+                        try:
+                            os.remove(filepath)
+                            print(f"已删除部分下载的文件: {filepath}")
+                        except OSError as remove_err:
+                            print(f"删除文件时出错: {remove_err}")
+                    raise
+
                 return {
-                    'title': video_info.get('title', 'YouTube视频'),
+                    'title': video_info.get('title', '视频'),
                     'filename': safe_filename,
                     'duration': video_info.get('duration', 0)
                 }
-                
+
         except Exception as e:
             print(f"下载视频失败: {str(e)}")
             if task_id in self.progress_queues:
@@ -157,55 +146,36 @@ class YouTubeService:
                 })
             return None
         finally:
-            # 结束进度队列
             if task_id in self.progress_queues:
                 self.progress_queues[task_id].put(None)
-                
+
     def get_progress_queue(self, task_id):
-        """获取指定任务的进度队列
-        
-        Args:
-            task_id: 下载任务ID
-            
-        Returns:
-            Queue: 进度队列对象
-        """
+        """获取进度队列"""
         return self.progress_queues.get(task_id)
-        
+
     def remove_progress_queue(self, task_id):
-        """移除指定任务的进度队列
-        
-        Args:
-            task_id: 下载任务ID
-        """
+        """移除进度队列"""
         if task_id in self.progress_queues:
             del self.progress_queues[task_id]
 
 if __name__ == "__main__":
-    # 测试代码
-    youtube_service = YouTubeService()
-    
-    print("YouTube视频下载器 (输入 'q' 退出)")
+    video_service = VideoService()
+
+    print("视频下载器 (输入 'q' 退出)")
     print("提示：")
     print("1. 此版本使用 yt-dlp，下载更稳定")
-    print("2. 自动选择720p或最接近的分辨率")
+    print("2. 自动选择最佳可用格式")
     print("3. 显示实时下载速度和剩余时间\n")
-    
+
     while True:
-        video_url = input("请输入YouTube视频链接: ")
-        if video_url.lower() == 'q':
+        user_input = input("请输入YouTube或Bilibili视频链接: ")
+        if user_input.lower() == 'q':
             break
-            
-        # 尝试修正常见的YouTube短链接
-        if 'youtu.be' in video_url:
-            video_id = video_url.split('/')[-1].split('?')[0]
-            video_url = f'https://www.youtube.com/watch?v={video_id}'
-            
+
         task_id = str(int(time.time()))
-        result = youtube_service.download_video(video_url, task_id)
-        
-        # 显示下载进度
-        progress_queue = youtube_service.get_progress_queue(task_id)
+        result = video_service.download_video(user_input, task_id)
+
+        progress_queue = video_service.get_progress_queue(task_id)
         if progress_queue:
             while True:
                 progress = progress_queue.get()
@@ -218,4 +188,7 @@ if __name__ == "__main__":
                     print(f"\n下载完成：{progress.get('video_path')}")
                     break
                 else:
-                    print(f"\r{progress.get('message', '')}", end="")
+                    print(f"\r进度: {progress.get('progress'):.1f}%  "
+                          f"已下载: {progress.get('downloaded')} / {progress.get('total')}  "
+                          f"速度: {progress.get('speed')}  剩余时间: {progress.get('eta')}", end="")
+                    sys.stdout.flush()
