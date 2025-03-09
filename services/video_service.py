@@ -203,6 +203,7 @@ class VideoService:
     def process_video(self, filename, source_type='upload'):
         """处理视频文件，上传到OSS，转录，并将结果保存到 Supabase"""
         try:
+            print(f"开始处理视频: {filename}, 来源: {source_type}")
             video_path = os.path.join(Config.RECORDS_FOLDER, filename)
             is_valid, error_msg = self.check_video(video_path)
             if not is_valid:
@@ -219,7 +220,7 @@ class VideoService:
             if not transcription:
                 return None
 
-            # 获取视频信息（用于保存到 Supabase）
+            # 获取视频信息
             video_info = self.get_video_info(video_path)
             if not video_info:
                 video_info = {'duration': '0:00', 'size': 0, 'fps': 0, 'resolution': ''}
@@ -238,14 +239,24 @@ class VideoService:
             plain_text = '\n\n'.join(plain_text)
             transcription_text = '\n\n'.join(formatted_text)
 
-            # 查找并更新 Supabase 记录
+            # --- 关键修改：使用 video_path 查询数据库 ---
+            print(f"正在查询数据库中的现有记录，使用 video_path={filename} 和 source={source_type}")
             existing_record = self.supabase.table('video_history') \
                 .select('*') \
-                .eq('title', filename) \
+                .eq('video_path', filename) \
                 .eq('source', source_type) \
                 .execute()
 
-            # 准备要更新的数据 - 保持原来的 video_path
+            print(f"查询结果: {existing_record.data}")
+
+            if not existing_record.data:
+                print(f"未找到视频记录: {filename}, 来源: {source_type}")
+                return None
+
+            # 更新记录
+            record_id = existing_record.data[0]['id']
+            print(f"找到现有记录，ID: {record_id}，准备更新")
+
             supabase_data = {
                 'duration': str(video_info['duration']),
                 'file_size': video_info['size'],
@@ -254,36 +265,28 @@ class VideoService:
                 'transcribed': "1",
                 'transcription': plain_text,
                 'origin': transcription_text,
-                'video_url': video_url  # 添加 OSS URL
+                'video_url': video_url
             }
 
-            if existing_record.data:
-                # 更新第一条匹配的记录
-                history_id = existing_record.data[0]['id']
-                result = self.supabase.table('video_history') \
-                    .update(supabase_data) \
-                    .eq('id', history_id) \
-                    .execute()
-            else:
-                # 如果记录不存在，添加必要的字段创建新记录
-                supabase_data.update({
-                    'title': filename,
-                    'source': source_type,
-                    'video_path': filename,  # 使用原始文件名
-                    'created_at': datetime.utcnow().isoformat() + 'Z',
-                })
-                result = self.supabase.table('video_history').insert(supabase_data).execute()
-                history_id = result.data[0]['id'] if result.data else None
+            print(f"更新数据: {supabase_data}")
+
+            result = self.supabase.table('video_history') \
+                .update(supabase_data) \
+                .eq('id', record_id) \
+                .execute()
+
+            print(f"更新结果: {result.data}")
 
             return {
                 'transcription': transcription,
                 'video_url': video_url,
-                'history_id': str(history_id)
+                'history_id': str(record_id)
             }
 
         except Exception as e:
             print(f"视频处理失败: {str(e)}")
             return None
+
 
     def get_video_info(self, video_path):
         """获取视频文件信息"""

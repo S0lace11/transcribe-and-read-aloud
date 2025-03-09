@@ -28,9 +28,18 @@ class YoutubeDownloadResource(Resource):
                             'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                         }
 
-                        video_service.save_to_history(video_data) 
+                        # 保存到历史记录并获取记录ID
+                        record_id = video_service.save_to_history(video_data)
+                        
+                        if record_id:
+                            print(f"成功保存历史记录，ID: {record_id}")
+                            # 不再自动转录，等待用户点击转录按钮
+                        else:
+                            print("保存历史记录失败")
                 except Exception as e:
                     print(f"下载和保存历史记录失败: {str(e)}")
+                    import traceback
+                    print(f"详细错误信息: {traceback.format_exc()}")
 
             thread = threading.Thread(target=download_and_save_history)
             thread.daemon = True

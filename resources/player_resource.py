@@ -1,5 +1,5 @@
 import os
-from flask import render_template, request, send_from_directory, make_response
+from flask import render_template, request, send_from_directory, make_response, redirect, url_for
 from flask_restful import Resource
 from config import Config
 
@@ -7,12 +7,8 @@ class PlayerResource(Resource):
     def get(self, video_path):
         """视频播放页面"""
         try:
-            source = request.args.get('source', 'upload')
-            history_id = request.args.get('history_id')
-
             # 需要在 app.py 中导入 video_service
             from app import video_service
-
 
             # 检查文件是否存在 (这部分逻辑保留，因为仍然需要检查本地文件)
             video_file_path = os.path.join(Config.RECORDS_FOLDER, video_path)
@@ -22,26 +18,34 @@ class PlayerResource(Resource):
             # 构建视频URL
             video_url = f'/video/{video_path}'
 
-            # 获取转录状态和文本
-            transcribed = "0"  # 默认值
-            transcription = None  # 默认值
+            # --- 关键修改：根据 history_id 从数据库中获取 source ---
+            history_id = request.args.get('history_id')
+            source = 'upload'  # 默认值
+            transcribed = "0"
+            transcription = None
 
             if history_id:
                 # 从 Supabase 获取视频信息
-                video_data = video_service.get_history_detail(history_id) # 调用 video_service 的方法
+                video_data = video_service.get_history_detail(history_id)
                 print("Supabase 数据:", video_data)
 
                 if video_data:
-                    transcribed = video_data.get('transcribed', '0')  # 从 Supabase 数据中获取
-                    transcription = video_data.get('transcription', '')  # 从 Supabase 数据中获取
+                    # 从数据库中获取 source
+                    source = video_data.get('source', 'upload')  # 从数据库记录中获取
+                    transcribed = video_data.get('transcribed', '0')
+                    transcription = video_data.get('transcription', '')
                     print("转录状态:", transcribed)
                     print("转录文本:", transcription)
+                else:
+                    # 如果找不到记录，可以重定向到错误页面或显示错误消息
+                    return "视频记录不存在", 404  # 或者重定向
+            # --- 关键修改结束 ---
 
             # 使用 make_response 创建响应对象，并设置 Content-Type
             response = make_response(render_template('player.html',
                                  video_path=video_path,
                                  video_url=video_url,
-                                 source=source,
+                                 source=source,  # 传递正确的 source 值
                                  history_id=history_id,
                                  transcribed=transcribed,
                                  transcription=transcription))
