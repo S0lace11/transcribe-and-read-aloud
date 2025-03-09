@@ -8,7 +8,7 @@ from config import Config
 import queue
 import time
 
-class VideoService:
+class VideoDownloadService:
     """视频下载服务类"""
 
     def __init__(self):
