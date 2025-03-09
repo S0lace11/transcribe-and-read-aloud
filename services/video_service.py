@@ -14,7 +14,6 @@ import requests
 from datetime import datetime, timezone # 导入 timezone
 import re
 from supabase import create_client, Client  # 导入 Supabase 客户端
-from urllib.parse import quote  # 导入 quote 函数
 
 
 class VideoService:
@@ -103,19 +102,11 @@ class VideoService:
             unique_filename = f"{uuid.uuid4()}{file_extension}"
             
             print(f"开始上传视频到OSS: {os.path.basename(video_path)}")
-
-            encoded_filename = quote(os.path.basename(video_path))
             
-            # 设置文件元数据，包含原始文件名
-            headers = {
-                'x-oss-meta-original-name': encoded_filename
-            }
-            
-            # 上传文件
+            # 直接上传文件，不设置额外的元数据
             self.bucket.put_object_from_file(
                 unique_filename, 
-                video_path,
-                headers=headers
+                video_path
             )
             
             # 生成文件访问URL（24小时有效）
@@ -179,12 +170,6 @@ class VideoService:
         except Exception as e:
             print(f"转写过程发生错误：{str(e)}")
             return None
-        
-    def get_original_title_from_task_id(self, task_id):
-        """根据 task_id 获取原始标题"""
-        from app import video_download_service  # 延迟导入
-
-        return video_download_service._task_id_to_title.get(task_id)    
 
     def format_time(self, milliseconds):
         """将毫秒数转换为时分秒格式
@@ -223,19 +208,6 @@ class VideoService:
             if not is_valid:
                 print(error_msg)
                 return None
-            
-            original_title = ""  # 初始化为空字符串
-            if source_type == 'youtube':
-                # 对于 YouTube 下载的视频，需要获取原始标题
-                # 假设您有一个 get_original_title_from_task_id 函数
-                # 可以根据 task_id 获取原始标题（您需要自己实现）
-                original_title = self.get_original_title_from_task_id(task_id)  # 您需要实现这个函数！
-                if not original_title:
-                    print("无法获取原始标题！")
-                    return None
-            elif source_type == 'upload':
-                # 对于本地上传的视频, 文件名(去除扩展名)就是标题
-                original_title = os.path.splitext(filename)[0]
 
             # 上传到OSS
             video_url = self.upload_to_oss(video_path)
@@ -286,12 +258,12 @@ class VideoService:
             }
 
             if existing_record.data:
-                # 更新现有记录
+                # 更新第一条匹配的记录
+                history_id = existing_record.data[0]['id']
                 result = self.supabase.table('video_history') \
                     .update(supabase_data) \
-                    .eq('id', existing_record.data['id']) \
+                    .eq('id', history_id) \
                     .execute()
-                history_id = existing_record.data['id']
             else:
                 # 如果记录不存在，添加必要的字段创建新记录
                 supabase_data.update({
@@ -384,7 +356,6 @@ class VideoService:
             result = self.supabase.table('video_history') \
                 .select('*') \
                 .eq('id', history_id) \
-                .single() \
                 .execute()
 
             if not result.data:
@@ -393,7 +364,7 @@ class VideoService:
             history_data = result.data
             
             # 2. 删除本地文件
-            video_path = os.path.join(Config.RECORDS_FOLDER, history_data.get('video_path', ''))
+            video_path = os.path.join(Config.RECORDS_FOLDER, history_data[0].get('video_path', ''))
             if os.path.exists(video_path):
                 try:
                     os.remove(video_path)
@@ -402,10 +373,10 @@ class VideoService:
                     print(f"删除本地文件失败: {str(e)}")
 
             # 3. 删除OSS文件
-            if history_data.get('video_url'):
+            if history_data[0].get('video_url'):
                 try:
                     # 从 URL 中提取 OSS 对象名
-                    oss_url = history_data['video_url']
+                    oss_url = history_data[0]['video_url']
                     # OSS URL 格式: https://bucket.endpoint/object_key?params
                     object_key = oss_url.split('?')[0].split('/')[-1]
                     
@@ -442,11 +413,10 @@ class VideoService:
           result = self.supabase.table('video_history') \
               .select('*') \
               .eq('id', history_id) \
-              .single() \
               .execute()
 
           if result.data:
-              return result.data  # 返回 Supabase 查询结果
+              return result.data[0]  # 返回 Supabase 查询结果
           else:
               print("历史记录未找到:", result)  # Supabase 错误信息更详细
               return None
