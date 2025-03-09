@@ -103,16 +103,10 @@ class VideoService:
             
             print(f"开始上传视频到OSS: {os.path.basename(video_path)}")
             
-            # 设置文件元数据，包含原始文件名
-            headers = {
-                'x-oss-meta-original-name': os.path.basename(video_path)
-            }
-            
-            # 上传文件
+            # 直接上传文件，不设置额外的元数据
             self.bucket.put_object_from_file(
                 unique_filename, 
-                video_path,
-                headers=headers
+                video_path
             )
             
             # 生成文件访问URL（24小时有效）
@@ -249,7 +243,6 @@ class VideoService:
                 .select('*') \
                 .eq('title', filename) \
                 .eq('source', source_type) \
-                .single() \
                 .execute()
 
             # 准备要更新的数据 - 保持原来的 video_path
@@ -265,12 +258,12 @@ class VideoService:
             }
 
             if existing_record.data:
-                # 更新现有记录
+                # 更新第一条匹配的记录
+                history_id = existing_record.data[0]['id']
                 result = self.supabase.table('video_history') \
                     .update(supabase_data) \
-                    .eq('id', existing_record.data['id']) \
+                    .eq('id', history_id) \
                     .execute()
-                history_id = existing_record.data['id']
             else:
                 # 如果记录不存在，添加必要的字段创建新记录
                 supabase_data.update({
@@ -363,7 +356,6 @@ class VideoService:
             result = self.supabase.table('video_history') \
                 .select('*') \
                 .eq('id', history_id) \
-                .single() \
                 .execute()
 
             if not result.data:
@@ -372,7 +364,7 @@ class VideoService:
             history_data = result.data
             
             # 2. 删除本地文件
-            video_path = os.path.join(Config.RECORDS_FOLDER, history_data.get('video_path', ''))
+            video_path = os.path.join(Config.RECORDS_FOLDER, history_data[0].get('video_path', ''))
             if os.path.exists(video_path):
                 try:
                     os.remove(video_path)
@@ -381,10 +373,10 @@ class VideoService:
                     print(f"删除本地文件失败: {str(e)}")
 
             # 3. 删除OSS文件
-            if history_data.get('video_url'):
+            if history_data[0].get('video_url'):
                 try:
                     # 从 URL 中提取 OSS 对象名
-                    oss_url = history_data['video_url']
+                    oss_url = history_data[0]['video_url']
                     # OSS URL 格式: https://bucket.endpoint/object_key?params
                     object_key = oss_url.split('?')[0].split('/')[-1]
                     
@@ -421,11 +413,10 @@ class VideoService:
           result = self.supabase.table('video_history') \
               .select('*') \
               .eq('id', history_id) \
-              .single() \
               .execute()
 
           if result.data:
-              return result.data  # 返回 Supabase 查询结果
+              return result.data[0]  # 返回 Supabase 查询结果
           else:
               print("历史记录未找到:", result)  # Supabase 错误信息更详细
               return None

@@ -1,4 +1,4 @@
-from flask import request, jsonify
+from flask import request
 from flask_restful import Resource
 
 class TranscribeVideoResource(Resource):
@@ -6,7 +6,7 @@ class TranscribeVideoResource(Resource):
         try:
             data = request.json
             if not data or 'filename' not in data or 'source' not in data:
-                return jsonify({'error': '缺少必要的参数'}), 400
+                return {'error': '缺少必要的参数'}, 400
 
             filename = data['filename']
             source = data['source']
