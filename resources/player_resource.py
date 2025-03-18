@@ -20,7 +20,7 @@ class PlayerResource(Resource):
 
             # --- 关键修改：根据 history_id 从数据库中获取 source ---
             history_id = request.args.get('history_id')
-            source = 'upload'  # 默认值
+
             transcribed = "0"
             transcription = None
 
@@ -31,7 +31,6 @@ class PlayerResource(Resource):
 
                 if video_data:
                     # 从数据库中获取 source
-                    source = video_data.get('source', 'upload')  # 从数据库记录中获取
                     transcribed = video_data.get('transcribed', '0')
                     transcription = video_data.get('transcription', '')
                     print("转录状态:", transcribed)
@@ -45,7 +44,6 @@ class PlayerResource(Resource):
             response = make_response(render_template('player.html',
                                  video_path=video_path,
                                  video_url=video_url,
-                                 source=source,  # 传递正确的 source 值
                                  history_id=history_id,
                                  transcribed=transcribed,
                                  transcription=transcription))

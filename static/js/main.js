@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // 当前处理的视频信息
     let currentVideo = {
         filename: null,
-        source: null  // 'youtube' 或 'upload'
+        // source: null  // 移除 source 属性
     };
 
     // 视频播放器初始化
@@ -63,6 +63,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         fileMessage.textContent = file.name;
         uploadBtn.disabled = false;
+        currentVideo.filename = file.name; // 存储文件名
     }
 
     // 处理回车键
@@ -76,15 +77,15 @@ document.addEventListener('DOMContentLoaded', function() {
     function handleUploadSuccess(response) {
         // 显示成功消息
         showSuccess('上传成功！');
-        
+
         // 刷新历史记录
         loadRecentHistory();
-        
+
         // 重置表单
         fileInput.value = '';
         fileMessage.textContent = '选择或拖放视频文件';
         uploadBtn.disabled = true;
-        
+
         // 保留调试信息
         console.log('Upload Response:', response);
         console.log('History ID:', response.history_id);
@@ -140,10 +141,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // 创建任务ID
             const taskId = Date.now().toString();
-            
+
             // 设置SSE连接
             const eventSource = new EventSource(`/progress/${taskId}`);
-            
+
             eventSource.onmessage = function(event) {
                 const data = JSON.parse(event.data);
                 if (data.status === 'downloading') {
@@ -151,10 +152,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else if (data.status === 'completed') {
                     eventSource.close();
                     showSuccess('下载完成！');
-                    
+
                     // 刷新历史记录
                     loadRecentHistory();
-                    
+
                     // 重置表单
                     urlInput.value = '';
                     enableUI();
@@ -172,7 +173,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     url: url,
                     task_id: taskId
                 })
@@ -189,7 +190,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // 处理视频转录
-    async function transcribeVideo(filename, source) {
+    async function transcribeVideo(filename) { // 移除 source 参数
         try {
             showInfo('正在转录视频...');
             disableUI();
@@ -201,7 +202,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 body: JSON.stringify({
                     filename: filename,
-                    source: source
+                    // source: source // 移除 source
                 })
             });
 
@@ -230,15 +231,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // YouTube视频转录按钮
     youtubeTranscribeBtn.addEventListener('click', function() {
-        if (currentVideo.source === 'youtube' && currentVideo.filename) {
-            transcribeVideo(currentVideo.filename, 'youtube');
+        if (currentVideo.filename) { // 简化条件
+            transcribeVideo(currentVideo.filename);
         }
     });
 
     // 上传视频转录按钮
     uploadTranscribeBtn.addEventListener('click', function() {
-        if (currentVideo.source === 'upload' && currentVideo.filename) {
-            transcribeVideo(currentVideo.filename, 'upload');
+        if (currentVideo.filename) { // 简化条件
+            transcribeVideo(currentVideo.filename);
         }
     });
 
@@ -261,19 +262,19 @@ document.addEventListener('DOMContentLoaded', function() {
             type: 'video/mp4',
             src: `/video/${filename}`
         });
-        
+
         videoContainer.classList.remove('d-none');
         player.load();
     }
 
     function updateTranscription(data) {
         console.log('收到转录数据:', data); // 添加调试日志
-        
+
         if (data && data.transcription && Array.isArray(data.transcription.sentences)) {
             const sentences = data.transcription.sentences;
             // 按时间排序
             sentences.sort((a, b) => a.begin_time - b.begin_time);
-            
+
             const formattedText = sentences.map(sentence => {
                 const startTime = formatTime(sentence.begin_time);
                 const endTime = formatTime(sentence.end_time);
@@ -281,7 +282,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const cleanText = sentence.text.replace(/<\|[^>]+\|>/g, '').trim();
                 return `[${startTime} - ${endTime}] ${cleanText}`;
             }).join('\n\n');
-            
+
             transcriptionText.value = formattedText;
             transcriptionContainer.classList.remove('d-none');
         } else {
@@ -339,7 +340,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const response = await fetch('/api/history/recent');
             const data = await response.json();
-            
+
             if (data.success) {
                 updateHistoryList(data.history);
             } else {
@@ -356,7 +357,7 @@ document.addEventListener('DOMContentLoaded', function() {
             historyContainer.innerHTML = '<div class="history-empty">暂无历史记录</div>';
             return;
         }
-        
+
         historyContainer.innerHTML = '';
         historyList.forEach(item => {
             const card = createHistoryCard(item);
@@ -368,13 +369,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const card = document.createElement('div');
         card.className = 'history-card';
         card.dataset.id = item.id;
-        
+
         // 格式化时长
         const duration = item.duration || '0:00';
-        
+
         card.innerHTML = `
             <div class="history-card-header">
-                <span class="source-badge ${item.source.toLowerCase()}">${item.source === 'youtube' ? 'YouTube' : '本地上传'}</span>
+                
                 <span class="process-time">${item.created_at}</span>
             </div>
             <div class="history-card-body">
@@ -384,7 +385,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="history-card-footer">
                 <span class="video-duration"><i class="far fa-clock"></i> ${duration}</span>
                 <div class="history-card-actions">
-                    <button class="btn btn-sm btn-primary view-btn" data-video="${item.video_path}" data-source="${item.source}">
+                    <button class="btn btn-sm btn-primary view-btn" data-video="${item.video_path}">
                         <i class="fas fa-play"></i> 查看
                     </button>
                     <button class="btn btn-sm delete-btn" data-id="${item.id}">
@@ -393,15 +394,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
         `;
-        
+
         // 添加查看按钮点击事件
         const viewBtn = card.querySelector('.view-btn');
         viewBtn.addEventListener('click', () => {
             const video = viewBtn.dataset.video;
-            const source = viewBtn.dataset.source;
+            // const source = viewBtn.dataset.source; // 移除 source
             viewVideo(video, item.id);
         });
-        
+
         // 添加删除按钮点击事件
         const deleteBtn = card.querySelector('.delete-btn');
         deleteBtn.addEventListener('click', async () => {
@@ -409,7 +410,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 await deleteHistoryItem(item.id);
             }
         });
-        
+
         return card;
     }
 
@@ -418,9 +419,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const response = await fetch(`/api/history/${historyId}`, {
                 method: 'DELETE'
             });
-            
+
             const data = await response.json();
-            
+
             if (data.success) {
                 // 从DOM中移除卡片
                 const card = document.querySelector(`.history-card[data-id="${historyId}"]`);
@@ -428,7 +429,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     card.remove();
                 }
                 showSuccess('删除成功');
-                
+
                 // 检查是否还有历史记录
                 const historyContainer = document.querySelector('#history-records');
                 if (!historyContainer.children.length) {
@@ -454,7 +455,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // 保留调试信息
         console.log('View Video:', videoPath);
         console.log('History ID:', historyId);
-        
+
         window.location.href = `/player/${encodeURIComponent(videoPath)}?history_id=${encodeURIComponent(historyId)}`;
     }
-}); 
+});

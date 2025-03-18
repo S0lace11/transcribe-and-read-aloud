@@ -7,7 +7,6 @@ from config import Config
 from http import HTTPStatus
 import json
 import uuid
-# from redis import Redis  # 移除 Redis 导入
 import time
 from moviepy.editor import VideoFileClip
 import requests
@@ -200,10 +199,10 @@ class VideoService:
             print(f"时间格式化失败: {str(e)}")
             return "00:00"
 
-    def process_video(self, filename, source_type='upload'):
+    def process_video(self, filename):
         """处理视频文件，上传到OSS，转录，并将结果保存到 Supabase"""
         try:
-            print(f"开始处理视频: {filename}, 来源: {source_type}")
+            print(f"开始处理视频: {filename}")
             video_path = os.path.join(Config.RECORDS_FOLDER, filename)
             is_valid, error_msg = self.check_video(video_path)
             if not is_valid:
@@ -239,25 +238,17 @@ class VideoService:
             plain_text = '\n\n'.join(plain_text)
             transcription_text = '\n\n'.join(formatted_text)
 
-            # --- 关键修改：使用 video_path 查询数据库 ---
-            print(f"正在查询数据库中的现有记录，使用 video_path={filename} 和 source={source_type}")
+                     # --- 关键修改：部分更新 ---
+         # 1. 检查 video_path 是否已存在
             existing_record = self.supabase.table('video_history') \
-                .select('*') \
-                .eq('video_path', filename) \
-                .eq('source', source_type) \
-                .execute()
+             .select('created_at') \
+             .eq('video_path', filename) \
+             .execute()
 
-            print(f"查询结果: {existing_record.data}")
-
-            if not existing_record.data:
-                print(f"未找到视频记录: {filename}, 来源: {source_type}")
-                return None
-
-            # 更新记录
-            record_id = existing_record.data[0]['id']
-            print(f"找到现有记录，ID: {record_id}，准备更新")
-
+            # --- 关键修改：使用 upsert ---
+            # 准备要插入或更新的数据
             supabase_data = {
+                'video_path': filename,  # 使用 video_path 作为唯一标识符
                 'duration': str(video_info['duration']),
                 'file_size': video_info['size'],
                 'fps': video_info['fps'],
@@ -265,22 +256,32 @@ class VideoService:
                 'transcribed': "1",
                 'transcription': plain_text,
                 'origin': transcription_text,
-                'video_url': video_url
+                'video_url': video_url,
+                'title': video_info.get('title', filename)  # 假设您有一个获取标题的方法
             }
 
-            print(f"更新数据: {supabase_data}")
+            # 3. 如果记录已存在，保留 created_at
+            if existing_record.data:
+                supabase_data['created_at'] = existing_record.data[0]['created_at']
 
+            # 使用 upsert 操作
+            print(f"正在执行 upsert 操作，数据: {supabase_data}")
             result = self.supabase.table('video_history') \
-                .update(supabase_data) \
-                .eq('id', record_id) \
+                .upsert(supabase_data, on_conflict='video_path') \
                 .execute()
 
-            print(f"更新结果: {result.data}")
+            print(f"upsert 结果: {result.data}")
+
+            if not result.data:
+                print(f"upsert 操作失败: {filename}")
+                return None
+
+            history_id = result.data[0]['id']
 
             return {
                 'transcription': transcription,
                 'video_url': video_url,
-                'history_id': str(record_id)
+                'history_id': str(history_id)
             }
 
         except Exception as e:
@@ -308,7 +309,6 @@ class VideoService:
             # 准备要插入到 Supabase 的数据, 添加缺少的字段
             supabase_data = {
               'title': video_data.get('title', '未命名视频'),
-              'source': video_data.get('source', 'upload'),
               'video_path': video_data.get('video_path', ''),
               'duration': video_data.get('duration', '0:00'),
               'created_at': datetime.utcnow().isoformat() + 'Z',

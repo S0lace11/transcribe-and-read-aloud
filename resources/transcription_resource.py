@@ -5,14 +5,13 @@ class TranscribeVideoResource(Resource):
     def post(self):
         try:
             data = request.json
-            if not data or 'filename' not in data or 'source' not in data:
+            if not data or 'filename' not in data:
                 return {'error': '缺少必要的参数'}, 400
 
             filename = data['filename']
-            source = data['source']
 
             from app import video_service  # 延迟导入
-            result = video_service.process_video(filename, source_type=source)
+            result = video_service.process_video(filename)
             if result:
                 # 确保返回的数据是可 JSON 序列化的
                 transcription_data = {

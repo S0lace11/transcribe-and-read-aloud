@@ -32,7 +32,6 @@ class UploadVideoResource(Resource):
             # 准备要保存的数据
             video_data = {
                 'title': filename,
-                'source': 'upload',
                 'video_path': filename,
                 'duration': str(video_info['duration']) if video_info and 'duration' in video_info else '0:00',
                 'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')

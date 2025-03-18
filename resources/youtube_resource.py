@@ -22,7 +22,6 @@ class YoutubeDownloadResource(Resource):
                     if video_info:
                         video_data = {
                             'title': video_info['title'],
-                            'source': 'youtube',
                             'video_path': video_info['filename'],  # 保存本地文件名
                             'duration': video_info['duration'],
                             'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')

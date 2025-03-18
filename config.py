@@ -58,10 +58,9 @@ class Config:
             filename.rsplit('.', 1)[1].lower() in cls.ALLOWED_EXTENSIONS
             
     @classmethod
-    def get_video_path(cls, filename, source_type='upload'):
+    def get_video_path(cls, filename):
         """获取视频文件路径"""
-        base_folder = cls.UPLOAD_FOLDER if source_type == 'upload' else cls.DOWNLOAD_FOLDER
-        return os.path.join(base_folder, filename)
+        return os.path.join(cls.RECORDS_FOLDER, filename)
         
     @classmethod
     def clean_old_files(cls, max_age_days=7):
